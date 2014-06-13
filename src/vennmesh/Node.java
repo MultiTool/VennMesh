@@ -15,9 +15,10 @@ import java.util.Dictionary;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /* ********************************************************************************************************* */
-public class Node extends Zone {
+public class Node extends Zone implements IDeleteable {
   public double Xloc, Yloc;
   public WorldList Earth;
   public Map<Node, NbrInfo> Neighbors;
@@ -38,6 +39,15 @@ public class Node extends Zone {
     this.Earth = Earth0;
   }
   /* ********************************************************************************************************* */
+  public void SendBlastPacket() {// will be based on location and randomness
+    Packet pkt = new Packet();
+    Collection<NbrInfo> values = this.Neighbors.values();
+    for (NbrInfo ninfo : values) {
+      // snox here we should doctor the packet clone to increase its distance and intensity
+      ninfo.Nbr.ReceiveBlastPacket(this, pkt.CloneMe());
+    }
+  }
+  /* ********************************************************************************************************* */
   public void CheckNeighbor(Node nbr) {// find out if neighbor is connectable
     if (Earth.contains(nbr)) {
       if (this.CanConnectTo(nbr)) {
@@ -52,9 +62,15 @@ public class Node extends Zone {
   }
   /* ********************************************************************************************************* */
   public void AttachNeighbor(Node nbr) {// This is called by the World
-    NbrInfo nbrinfo = new NbrInfo();
+    NbrInfo nbrinfo;
+    if (this.Neighbors.containsKey(nbr)) {
+      nbrinfo = this.Neighbors.get(nbr);
+      nbrinfo.Dead = false;
+    } else {
+      nbrinfo = new NbrInfo();
+      this.Neighbors.put(nbr, nbrinfo);
+    }
     nbrinfo.Nbr = nbr;
-    this.Neighbors.put(nbr, nbrinfo);
   }
   /* ********************************************************************************************************* */
   public void DisconnectNeighbor(Node nbr) {// This is called by the World
@@ -64,15 +80,31 @@ public class Node extends Zone {
   }
   /* ********************************************************************************************************* */
   public void CleanEverything() {// called once in a while
-    for (Map.Entry<Zone, RouteEntry> kvp : this.Routing.entrySet()) {
-      RouteEntry endpoint = kvp.getValue();
+    for (Map.Entry<Zone, RouteEntry> kvp0 : this.Routing.entrySet()) {
+      RouteEntry endpoint = kvp0.getValue();
       if (endpoint.ClosestNbr.Dead) {
         endpoint.ClosestNbr.UnRefMe();
-        if (endpoint.ClosestNbr.RefCount <= 0) {// if nbr is dead, AND no routes reference it, delete it.
-          Neighbors.remove(endpoint.ClosestNbr.Nbr);
-        }
+        /*
+         if (endpoint.ClosestNbr.RefCount <= 0) {// if nbr is dead, AND no routes reference it, delete it.
+         Neighbors.remove(endpoint.ClosestNbr.Nbr);
+         }
+         */
         endpoint.ClosestNbr = null;// guarantee a crash if bad code tries to use this again.
-        this.Routing.remove(kvp.getKey());
+        this.Routing.remove(kvp0.getKey());
+        endpoint.DeleteMe();
+      }
+    }
+
+    Node[] keys = new Node[this.Neighbors.size()];
+    this.Neighbors.keySet().toArray(keys);
+    for (int cnt = 0; cnt < keys.length; cnt++) {
+      Node key = keys[cnt];
+      NbrInfo nbr = this.Neighbors.get(key);
+      if (nbr.Dead) {
+        if (nbr.RefCount <= 0) {// if nbr is dead, AND no routes reference it, delete it.
+          Neighbors.remove(key);
+          nbr.DeleteMe();
+        }
       }
     }
     /*
@@ -119,6 +151,11 @@ public class Node extends Zone {
       RouteEntry RemovedRoute = this.Routing.remove(route);
       route.ClosestNbr.UnRefMe();
     }
+  }
+  /* ********************************************************************************************************* */
+  @Override
+  public void DeleteMe() {
+    //throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
   }
   /* ********************************************************************************************************* */
   public class EndpointFocusComparer implements Comparator<RouteEntry> {
@@ -263,12 +300,18 @@ public class Node extends Zone {
     g2d.setColor(Color.cyan);
     for (Map.Entry<Node, NbrInfo> kvp : this.Neighbors.entrySet()) {
       ninf = kvp.getValue();
-      nbr = ninf.Nbr;
-      g2d.drawLine((int) this.Xloc, (int) this.Yloc, (int) nbr.Xloc, (int) nbr.Yloc);
+      if (!ninf.Dead) {
+        nbr = ninf.Nbr;
+        try {
+          g2d.drawLine((int) this.Xloc, (int) this.Yloc, (int) nbr.Xloc, (int) nbr.Yloc);
+        } catch (Exception ex) {
+          boolean nop = true;
+        }
+      }
     }
   }
   /* ********************************************************************************************************* */
-  public static class RouteEntry {
+  public static class RouteEntry implements IDeleteable {
     public Node EndPointNode;// this is the same as the hash key that finds this record
     public int BirthTimeStamp;
     public double Distance;
@@ -300,9 +343,13 @@ public class Node extends Zone {
       this.NextFieldStrength = 0.0;
       this.FieldSum = 0.0;
     }
+    @Override
+    public void DeleteMe() {
+      throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
   }
   /* ********************************************************************************************************* */
-  public static class NbrInfo {
+  public static class NbrInfo implements IDeleteable {
     public Node Nbr;
     public double Distance = Double.POSITIVE_INFINITY;
     public boolean Dead = false;
@@ -317,9 +364,13 @@ public class Node extends Zone {
     public int UnRefMe() {
       return --RefCount;
     }
+    @Override
+    public void DeleteMe() {
+      //throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    }
   }
   /* ********************************************************************************************************* */
-  public static class Packet {// this is a blast packet
+  public static class Packet implements IDeleteable {// this is a blast packet
     public int BirthTimeStamp;
     public double Distance;
     public double FieldStrength;
@@ -331,6 +382,10 @@ public class Node extends Zone {
       child.Distance = this.Distance;
       child.FieldStrength = this.FieldStrength;
       return child;
+    }
+    @Override
+    public void DeleteMe() {
+      //throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
     }
   }
 }

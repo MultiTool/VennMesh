@@ -8,6 +8,10 @@ package vennmesh;
 
  @author MultiTool
  */
-public class Zone {
+public class Zone implements IDeleteable {
   public String ZoneId;
+  @Override
+  public void DeleteMe() {
+    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+  }
 }

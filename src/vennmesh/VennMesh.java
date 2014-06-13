@@ -6,9 +6,17 @@ package vennmesh;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
 import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.awt.image.BufferedImage;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 
@@ -34,7 +42,7 @@ public class VennMesh {
   private static void createAndShowGUI() {
     // http://docs.oracle.com/javase/tutorial/uiswing/examples/start/HelloWorldSwingProject/src/start/HelloWorldSwing.java
     //Create and set up the window.
-    JFrame frame = new JFrame("Fretless");
+    JFrame frame = new JFrame("VennMesh");
     frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
     // capture global keyboard events, such as quit (ctrl-q) or save (ctrl-s). 
@@ -76,18 +84,107 @@ public class VennMesh {
       Drawing_Canvas dc = new Drawing_Canvas();
 
       dc.setBackground(Color.red);
-      dc.setSize(700, 600);
+      dc.setSize(700, 700);
       panel.add(dc, BorderLayout.CENTER);
 
       //panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
     }
 
-    frame.setSize(700, 600);
+    frame.setSize(700, 700);
     frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
     frame.setVisible(true);
   }
   /* *************************************************************************************************** */
   public static class Drawing_Canvas extends javax.swing.JPanel {/* JFrame */
 
+    BufferedImage Buffer;
+    Graphics2D GlobalGraphics;
+    Display display;
+    /* *************************************************************************************************** */
+    public Drawing_Canvas() {
+      this.setName("Drawing_Canvas");
+      display= new Display();
+      
+      this.addMouseListener(new java.awt.event.MouseAdapter() {
+        @Override
+        public void mouseClicked(java.awt.event.MouseEvent evt) {
+        }
+        @Override
+        public void mousePressed(java.awt.event.MouseEvent evt) {
+        }
+        @Override
+        public void mouseReleased(java.awt.event.MouseEvent evt) {
+        }
+      });
+      this.addMouseMotionListener(new java.awt.event.MouseAdapter() {
+        @Override
+        public void mouseDragged(java.awt.event.MouseEvent evt) {
+        }
+        @Override
+        public void mouseMoved(java.awt.event.MouseEvent evt) {
+        }
+      });
+      this.setFocusable(true);
+      this.addKeyListener(new KeyListener() {
+        @Override
+        public void keyPressed(KeyEvent e) {
+          if (e.isControlDown()) {
+            char ch = (char) e.getKeyCode();// always uppercase
+            System.out.println("ch[" + ch + "]");
+            if (e.getKeyCode() == KeyEvent.VK_C) {
+              System.out.println("Copy!");
+            } else if (e.getKeyCode() == KeyEvent.VK_X) {
+              System.out.println("Cut!");
+            }
+          } else {
+            if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {// just escape
+              System.out.println("Quit!");
+              System.exit(0);
+            }
+          }
+        }
+        @Override
+        public void keyReleased(KeyEvent e) {
+        }
+        @Override
+        public void keyTyped(KeyEvent e) {
+        }
+      });
+
+      this.addComponentListener(new ComponentListener() {
+        @Override
+        public void componentResized(ComponentEvent evt) {/* This method is called after the component's size changes */
+          Component c = (Component) evt.getSource();
+          Dimension newSize = c.getSize();/* Get new size */
+          Buffer = new BufferedImage(newSize.width, newSize.height, BufferedImage.TYPE_INT_ARGB);
+          GlobalGraphics = Buffer.createGraphics();
+          display.CleanEverything();
+          display.RandomizeAllConnections();
+          display.Draw_Me(GlobalGraphics);
+        }
+        @Override
+        public void componentMoved(ComponentEvent e) {
+        }
+        @Override
+        public void componentShown(ComponentEvent e) {
+        }
+        @Override
+        public void componentHidden(ComponentEvent e) {
+        }
+      });
+    }
+    /* *************************************************************************************************** */
+    @Override
+    public void paintComponent(Graphics g) {
+      Graphics2D g2 = (Graphics2D) g;
+      g2.drawImage(this.Buffer, null, this);
+      //http://www.realapplets.com/tutorial/DoubleBuffering.html
+      /* http://download.oracle.com/javase/tutorial/2d/images/drawonimage.html */
+    }
+    /* *************************************************************************************************** */
+    @Override
+    public void update(Graphics g) {
+      paint(g);
+    }
   }
 }
