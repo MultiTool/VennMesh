@@ -12,13 +12,16 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
+import java.awt.Rectangle;
 import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.image.BufferedImage;
+import java.util.Timer;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 
 /**
 
@@ -103,8 +106,12 @@ public class VennMesh {
     /* *************************************************************************************************** */
     public Drawing_Canvas() {
       this.setName("Drawing_Canvas");
-      display= new Display();
-      
+      display = new Display();
+      if (false) {
+        Rectangle screen = this.getBounds();
+        Buffer = new BufferedImage(screen.width, screen.height, BufferedImage.TYPE_INT_ARGB);
+        GlobalGraphics = Buffer.createGraphics();
+      }
       this.addMouseListener(new java.awt.event.MouseAdapter() {
         @Override
         public void mouseClicked(java.awt.event.MouseEvent evt) {
@@ -157,8 +164,8 @@ public class VennMesh {
           Component c = (Component) evt.getSource();
           Dimension newSize = c.getSize();/* Get new size */
           Buffer = new BufferedImage(newSize.width, newSize.height, BufferedImage.TYPE_INT_ARGB);
+          //Buffer = new BufferedImage(newSize.width, newSize.height, BufferedImage.TYPE_INT_RGB);
           GlobalGraphics = Buffer.createGraphics();
-          display.CleanEverything();
           display.RandomizeAllConnections();
           display.Draw_Me(GlobalGraphics);
         }
@@ -167,19 +174,55 @@ public class VennMesh {
         }
         @Override
         public void componentShown(ComponentEvent e) {
+          boolean nop = true;
         }
         @Override
         public void componentHidden(ComponentEvent e) {
         }
       });
+
+      if (false) {
+        final Runnable doHelloWorld = new Runnable() {
+          public void run() {
+            System.out.println("Hello World on " + Thread.currentThread());
+          }
+        };
+        Thread appThread = new Thread() {
+          public void run() {
+            try {
+              SwingUtilities.invokeAndWait(doHelloWorld);
+            } catch (Exception e) {
+              e.printStackTrace();
+            }
+            System.out.println("Finished on " + Thread.currentThread());
+          }
+        };
+        appThread.start();
+      }
     }
     /* *************************************************************************************************** */
     @Override
     public void paintComponent(Graphics g) {
+      if (this.Buffer == null) {
+        return;
+      }
+      display.RandomizeAllConnections();
+      Rectangle screen = this.getBounds();// transformationContext.getScreen();
+      //Color bg = new Color(0.5f, 0.5f, 0.5f);
+      //Color bg = new Color(200, 255, 200);// nice light green
+      Color bg = new Color(230, 230, 230);// light gray
+      GlobalGraphics.setColor(bg);//Color.LIGHT_GRAY);
+      GlobalGraphics.fillRect(0, 0, (int) screen.getWidth(), (int) screen.getHeight());
+      display.Draw_Me(GlobalGraphics);
       Graphics2D g2 = (Graphics2D) g;
       g2.drawImage(this.Buffer, null, this);
       //http://www.realapplets.com/tutorial/DoubleBuffering.html
       /* http://download.oracle.com/javase/tutorial/2d/images/drawonimage.html */
+      try {
+        Thread.sleep(500);
+      } catch (Exception ex) {
+      }
+      repaint(); // Repaint indirectly calls paintComponent.
     }
     /* *************************************************************************************************** */
     @Override

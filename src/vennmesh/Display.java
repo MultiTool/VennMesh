@@ -19,6 +19,7 @@ public class Display {// 2d grid of nodes
   //double ConnectionDensity = 0.2;
   double ConnectionDensity = 0.5;
   //double ConnectionDensity = 1.0;
+  double RandomChangeRate;
   int MaxConnectionRadius = 1;
   int XOrg, YOrg;
   List<Node> Nodes;
@@ -39,49 +40,15 @@ public class Display {// 2d grid of nodes
         node.Yloc = this.YOrg + vcnt * NodeSpacing;
       }
     }
-    //ConnectAll();
+    RandomChangeRate = 1.0;
     RandomizeAllConnections();
-  }
-  /* ********************************************************************************************************* */
-  public void ConnectAll() {
-    /*
-    
-     problem: nodes can get connected 4 times. 
-    
-     */
-    int X0, Y0, X1, Y1;
-    int XMax = this.GridWdt - 1;
-    int YMax = this.GridHgt - 1;
-    for (int vcnt = 0; vcnt < this.GridHgt; vcnt++) {
-      Y0 = Math.max(vcnt - MaxConnectionRadius, 0);// clip Y
-      Y1 = Math.min(vcnt + MaxConnectionRadius, YMax);
-      for (int hcnt = 0; hcnt < this.GridWdt; hcnt++) {
-        X0 = Math.max(hcnt - MaxConnectionRadius, 0);// clip X
-        X1 = Math.min(hcnt + MaxConnectionRadius, XMax);
-        ConnectRegion(X0, Y0, hcnt, vcnt, X1, Y1);
-      }
-    }
-  }
-  /* ********************************************************************************************************* */
-  public void ConnectRegion(int X0, int Y0, int XLoc, int YLoc, int X1, int Y1) {// Sparsely connect a node with its neighbors.
-    Node ctr = GetNodeFromXY(XLoc, YLoc);// get this from xloc and yloc
-    for (int vcnt = Y0; vcnt <= Y1; vcnt++) {
-      for (int hcnt = X0; hcnt <= X1; hcnt++) {
-        if (!((XLoc == hcnt) && (YLoc == vcnt))) {// do not connect to self
-          Node nbr = GetNodeFromXY(hcnt, vcnt);
-          if (!ctr.Neighbors.containsKey(nbr)) {
-            if (rand.nextDouble() <= ConnectionDensity) {
-              Connect2Nodes(ctr, nbr);
-            }
-          }
-        }
-      }
-    }
+    RandomChangeRate = 0.125;
   }
   /* ********************************************************************************************************* */
   public void Connect2Nodes(Node node0, Node node1) {
-    node0.AttachNeighbor(node1);
-    node1.AttachNeighbor(node0);
+    double Distance = 1.0;// snox, simple for now, temporary.
+    node0.AttachNeighbor(node1, Distance);
+    node1.AttachNeighbor(node0, Distance);
   }
   /* ********************************************************************************************************* */
   public void Disconnect2Nodes(Node node0, Node node1) {
@@ -118,18 +85,22 @@ public class Display {// 2d grid of nodes
   public void RandomizeNodeConnections(int X0, int Y0, int XLoc, int YLoc, int X1, int Y1) {// Sparsely connect a node with its neighbors.
     double Azar;
     Node ctr = GetNodeFromXY(XLoc, YLoc);// get this from xloc and yloc
+    ctr.CleanEverything();// clean out all dead neighbor links and routes that refer to them
     for (int vcnt = Y0; vcnt <= Y1; vcnt++) {
       for (int hcnt = X0; hcnt <= X1; hcnt++) {
         if (!((XLoc == hcnt) && (YLoc == vcnt))) {// do not connect to self
-          Node nbr = GetNodeFromXY(hcnt, vcnt);
           Azar = rand.nextDouble();
-          if (ctr.Neighbors.containsKey(nbr)) {
-            if (Azar > ConnectionDensity) {
-              Disconnect2Nodes(ctr, nbr);
-            }
-          } else {
-            if (Azar <= ConnectionDensity) {
-              Connect2Nodes(ctr, nbr);
+          if (Azar <= RandomChangeRate) {
+            Node nbr = GetNodeFromXY(hcnt, vcnt);
+            Azar = rand.nextDouble();
+            if (ctr.Neighbors.containsKey(nbr)) {
+              if (Azar > ConnectionDensity) {
+                Disconnect2Nodes(ctr, nbr);
+              }
+            } else {
+              if (Azar <= ConnectionDensity) {
+                Connect2Nodes(ctr, nbr);
+              }
             }
           }
         }

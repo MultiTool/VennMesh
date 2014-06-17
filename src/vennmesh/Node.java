@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Dictionary;
 import java.util.HashMap;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -24,13 +25,16 @@ public class Node extends Zone implements IDeleteable {
   public Map<Node, NbrInfo> Neighbors;
   public Map<Zone, RouteEntry> Routing;
   public List<Zone> ZoneVector;// my address
-    /* ********************************************************************************************************* */
+  public LinkedList<Packet> PacketInBuf, PacketOutBuf;
+  /* ********************************************************************************************************* */
   public Node() {
     Xloc = 0;
     Yloc = 0;
     Neighbors = new HashMap<Node, NbrInfo>();
     Routing = new HashMap<Zone, RouteEntry>();
     ZoneVector = new ArrayList<Zone>();// my address
+    PacketInBuf = new LinkedList<Packet>();
+    PacketOutBuf = new LinkedList<Packet>();
   }
   /* ********************************************************************************************************* */
   public Node(WorldList Earth0) //: base()
@@ -39,12 +43,90 @@ public class Node extends Zone implements IDeleteable {
     this.Earth = Earth0;
   }
   /* ********************************************************************************************************* */
-  public void SendBlastPacket() {// will be based on location and randomness
+  public void ReceivePacketToBuffer(Packet pkt) {// process a packet for distance updates
+    PacketInBuf.add(pkt);
+  }
+  /* ********************************************************************************************************* */
+  public void LaunchMyOwnBlastPacket() {// emit my own packet to give everyone else my metrics
     Packet pkt = new Packet();
+    pkt.Origin = this;
+    pkt.Distance = 0;
+    pkt.FieldStrength = 1.0;// if we are initiating our own blast, field strength is 1. 
+    pkt.LatestSender = this;
+    PacketOutBuf.add(pkt);
+  }
+  /* ********************************************************************************************************* */
+  public void ProcessInPacketBuffer() {// process a packet for distance updates
+    Packet pkt, pktnext;
+    while (!PacketInBuf.isEmpty()) {
+      pkt = PacketInBuf.removeFirst();
+      pktnext = ProcessBlastPacket(pkt);
+      if (pktnext != null) {
+        PacketOutBuf.add(pktnext);
+      }
+      pkt.DeleteMe();
+    }
+  }
+  /* ********************************************************************************************************* */
+  public void BroadcastAllPackets() {
+    Packet pkt;// go through all waiting outpackets, and send each to all neighbors.
+    while (!PacketOutBuf.isEmpty()) {
+      pkt = PacketOutBuf.removeFirst();
+      BroadcastPacket(pkt);
+    }
+  }
+  /* ********************************************************************************************************* */
+  public Packet ProcessBlastPacket(Packet pkt) {// process a packet for distance updates
+    Node nbr = pkt.LatestSender;
+    //pkt.LatestSender = this;//?
+    NbrInfo FromNbr = this.Neighbors.get(nbr);// nbr is the neighbor who handed me this packet
+    //pkt.Distance += FromNbr.Distance;// now packet's distance will be my distance from endpoint
+    RouteEntry MyKnowledgeOfEndpoint;
+    Packet PktNext = null;
+    // when I get a blast packet, I look up its origin (as destination) in the routing table. 
+    if (!this.Routing.containsKey(pkt.Origin)) {// if no entry is found, add it and forward the packet.
+      // here is where we would flag if our routing table is too full
+      MyKnowledgeOfEndpoint = new RouteEntry();
+      MyKnowledgeOfEndpoint.ConsumePacket(FromNbr, pkt);
+      MyKnowledgeOfEndpoint.AddFieldStrength(pkt, this.Neighbors.size());
+      this.Routing.put(pkt.Origin, MyKnowledgeOfEndpoint);
+      FromNbr.RefMe();
+      PktNext = pkt.CloneMe();
+      PktNext.UpdateForResend(this, FromNbr.Distance, MyKnowledgeOfEndpoint.FieldFocus);// now child's field strength will be the strength of field at me
+      //PktNext.LatestSender = this; PktNext.FieldStrength *= MyKnowledgeOfEndpoint.FieldFocus;// now child's field strength will be the strength of field at me
+    } else {
+      MyKnowledgeOfEndpoint = this.Routing.get(pkt.Origin);
+      if (pkt.BirthTimeStamp > MyKnowledgeOfEndpoint.BirthTimeStamp) {// if its birth time is more recent than the existing entry, replace the old entry and forward the packet.
+        MyKnowledgeOfEndpoint.ClosestNbr.UnRefMe();
+        MyKnowledgeOfEndpoint.ConsumePacket(FromNbr, pkt);
+        MyKnowledgeOfEndpoint.RolloverFieldStrength();// old packet is surpassed, close the deal?
+        MyKnowledgeOfEndpoint.AddFieldStrength(pkt, this.Neighbors.size());
+        FromNbr.RefMe();
+        PktNext = pkt.CloneMe();
+        PktNext.UpdateForResend(this, FromNbr.Distance, MyKnowledgeOfEndpoint.FieldFocus);
+        //PktNext.LatestSender = this; PktNext.FieldStrength *= MyKnowledgeOfEndpoint.FieldFocus;// now child's field strength will be the strength of field at me
+      } else if (pkt.BirthTimeStamp == MyKnowledgeOfEndpoint.BirthTimeStamp) {// if its birth time is the same as the current entry
+        if (pkt.Distance < MyKnowledgeOfEndpoint.Distance) {// if it has better miles than the current entry, replace the current entry and forward the packet.
+          MyKnowledgeOfEndpoint.ClosestNbr.UnRefMe();
+          MyKnowledgeOfEndpoint.ConsumePacket(FromNbr, pkt);
+          MyKnowledgeOfEndpoint.AddFieldStrength(pkt, this.Neighbors.size());
+          FromNbr.RefMe();
+          PktNext = pkt.CloneMe();
+          PktNext.UpdateForResend(this, FromNbr.Distance, MyKnowledgeOfEndpoint.FieldFocus);
+          //PktNext.LatestSender = this; PktNext.FieldStrength *= MyKnowledgeOfEndpoint.FieldFocus;// now child's field strength will be the strength of field at me
+        }
+      }
+    }
+    // otherwise return null and the packet will be discarded.
+    return PktNext;
+  }
+  /* ********************************************************************************************************* */
+  public void BroadcastPacket(Packet pkt) {
     Collection<NbrInfo> values = this.Neighbors.values();
-    for (NbrInfo ninfo : values) {
-      // snox here we should doctor the packet clone to increase its distance and intensity
-      ninfo.Nbr.ReceiveBlastPacket(this, pkt.CloneMe());
+    Packet child;
+    for (NbrInfo ninfo : values) {// pass to all neighbors
+      child = pkt.CloneMe();
+      ninfo.Nbr.ReceivePacketToBuffer(child);
     }
   }
   /* ********************************************************************************************************* */
@@ -61,7 +143,7 @@ public class Node extends Zone implements IDeleteable {
     return true;
   }
   /* ********************************************************************************************************* */
-  public void AttachNeighbor(Node nbr) {// This is called by the World
+  public void AttachNeighbor(Node nbr, double Distance) {// This is called by the World
     NbrInfo nbrinfo;
     if (this.Neighbors.containsKey(nbr)) {
       nbrinfo = this.Neighbors.get(nbr);
@@ -70,13 +152,18 @@ public class Node extends Zone implements IDeleteable {
       nbrinfo = new NbrInfo();
       this.Neighbors.put(nbr, nbrinfo);
     }
+    nbrinfo.Distance = Distance;
     nbrinfo.Nbr = nbr;
   }
   /* ********************************************************************************************************* */
   public void DisconnectNeighbor(Node nbr) {// This is called by the World
     NbrInfo nbrinfo;
     nbrinfo = this.Neighbors.get(nbr);
-    nbrinfo.MarkForRemoval();
+    try {
+      nbrinfo.MarkForRemoval();
+    } catch (Exception ex) {
+      boolean nop = true;
+    }
   }
   /* ********************************************************************************************************* */
   public void CleanEverything() {// called once in a while
@@ -176,72 +263,6 @@ public class Node extends Zone implements IDeleteable {
     PktNext.Distance += NextHop.Distance;// snox packet receiver should probably inc distance on receipt. then actual measured time might be used.
     // next clone the packet, increment its distance by entry.ClosestNbr.Distance, and forward it to the NextHop nbr
   }
-  /*
-  
-   ***********  we need a thing like ReceiveBlastPacket that processes packets to calculate FieldStrength 
-  
-   we can pass field strength with each blast, but it will only be relevant for the previous blast.
-  
-   difference is though that we need to use ALL packets from a blast to fully calc strength
-  
-   strength = clip( 2*(sum of FieldStrength of all packets of this packet ID)/(my total neighbors) )
-  
-   no no what we need to do is:
-   poll all neighbors regarding a particular endpoint. 
-   for everyone who is closer to that endpoint:
-   pass their field strength through me (add them and mult by my focus, etc). make that my field strength.
-  
-   OR
-  
-   every time I get a packet from X nbr, it carries that nbr's field strength for that endpoint. (could be ALL endpoints at once, yes?)
-   I add this field strength to a total. after Y time, I combine the total with my focus (etc) and publish my field strength.
-   until then my strength with this endpoint is 0, or antiquated.
-  
-   does the field strength have to be from a single blast ID?
-  
-  
-   */
-  /* ********************************************************************************************************* */
-  public Packet ReceiveBlastPacket(Node nbr, Packet pkt) {// process a packet for distance updates
-    NbrInfo NbrRec = this.Neighbors.get(nbr);// nbr is the neighbor who handed me this packet
-    RouteEntry entry;
-    Packet PktNext = null;
-    // when I get a blast packet, I look up its origin (as destination) in the routing table. 
-    if (!this.Routing.containsKey(pkt.Origin)) {// if no entry is found, add it and forward the packet.
-      // here is where we would flag if our routing table is too full
-      entry = new RouteEntry();
-      entry.ConsumePacket(NbrRec, pkt);
-      entry.AddFieldStrength(pkt, this.Neighbors.size());
-      this.Routing.put(pkt.Origin, entry);
-      NbrRec.RefMe();
-      PktNext = pkt.CloneMe();
-      PktNext.Distance += NbrRec.Distance;// snox should probably inc distance *before* we call this function
-    } else {
-      entry = this.Routing.get(pkt.Origin);
-      if (pkt.BirthTimeStamp > entry.BirthTimeStamp) {// if its birth time is more recent than the existing entry, replace the old entry and forward the packet.
-        entry.ClosestNbr.UnRefMe();
-        entry.ConsumePacket(NbrRec, pkt);
-        entry.RolloverFieldStrength();// old packet is surpassed, close the deal
-        entry.FieldSum = entry.NextFieldStrength = 0.0;
-        entry.AddFieldStrength(pkt, this.Neighbors.size());
-
-        NbrRec.RefMe();
-        PktNext = pkt.CloneMe();
-        PktNext.Distance += NbrRec.Distance;// snox should probably inc distance *before* we call this function
-      } else if (pkt.BirthTimeStamp == entry.BirthTimeStamp) {// if its birth time is the same as the current entry
-        if (pkt.Distance < entry.Distance) {// if it has better miles than the current entry, replace the current entry and forward the packet.
-          entry.ClosestNbr.UnRefMe();
-          entry.ConsumePacket(NbrRec, pkt);
-          entry.AddFieldStrength(pkt, this.Neighbors.size());
-          NbrRec.RefMe();
-          PktNext = pkt.CloneMe();
-          PktNext.Distance += NbrRec.Distance;// snox should probably inc distance *before* we call this function
-        }
-      }
-    }
-    // otherwise return null and the packet will be discarded.
-    return PktNext;
-  }
   /* ********************************************************************************************************* */
   public void CalcFieldFocus(RouteEntry EndPoint) {// Determine how much the gradient from a zone should fall off as it passes through me.
     double Dist;
@@ -324,6 +345,7 @@ public class Node extends Zone implements IDeleteable {
       this.BirthTimeStamp = pkt.BirthTimeStamp;// copy over best packet info
       this.Distance = pkt.Distance;
       this.EndPointNode = pkt.Origin;
+      // and FieldStrength?
     }
     public void ConsumePacket(NbrInfo nbr, Packet pkt) {
       this.ClosestNbr = nbr;// copy over best packet info
@@ -331,10 +353,6 @@ public class Node extends Zone implements IDeleteable {
     }
     public void AddFieldStrength(Packet pkt, double NumNbrs) {
       this.FieldSum += pkt.FieldStrength;
-      if (false) {
-        this.FieldStrength += 2.0 * (pkt.FieldStrength / NumNbrs);
-        this.FieldStrength = Math.min(1.0, this.FieldStrength);
-      }
       this.NextFieldStrength += 2.0 * (pkt.FieldStrength / NumNbrs);
       this.NextFieldStrength = Math.min(1.0, this.NextFieldStrength);
     }
@@ -375,13 +393,20 @@ public class Node extends Zone implements IDeleteable {
     public double Distance;
     public double FieldStrength;
     public Node Origin;
+    public Node LatestSender;// most recent node who forwarded me
     public Packet CloneMe() {
       Packet child = new Packet();
       child.BirthTimeStamp = this.BirthTimeStamp;
-      child.Origin = this.Origin;
       child.Distance = this.Distance;
       child.FieldStrength = this.FieldStrength;
+      child.Origin = this.Origin;
+      child.LatestSender = this.LatestSender;
       return child;
+    }
+    public void UpdateForResend(Node Sender, double NextDist, double FieldFocus) {
+      this.LatestSender = Sender;
+      this.Distance += NextDist;// now packet's distance will be my distance from endpoint
+      this.FieldStrength *= FieldFocus;// now child's field strength will be the strength of field at me
     }
     @Override
     public void DeleteMe() {
@@ -389,3 +414,11 @@ public class Node extends Zone implements IDeleteable {
     }
   }
 }
+
+/*
+  
+ every time I get a packet from X nbr, it carries that nbr's field strength for that endpoint. (could be ALL endpoints at once, yes?)
+ I add this field strength to a total. after Y time, I combine the total with my focus (etc) and publish my field strength.
+ until then my strength with this endpoint is 0, or antiquated.
+  
+ */
