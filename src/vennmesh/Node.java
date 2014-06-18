@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 
 /* ********************************************************************************************************* */
@@ -126,7 +127,7 @@ public class Node extends Zone implements IDeleteable {
     Packet child;
     for (NbrInfo ninfo : values) {// pass to all neighbors
       child = pkt.CloneMe();
-      ninfo.Nbr.ReceivePacketToBuffer(child);
+      ninfo.ReceivePacketToBuffer(child);
     }
   }
   /* ********************************************************************************************************* */
@@ -150,6 +151,7 @@ public class Node extends Zone implements IDeleteable {
       nbrinfo.Dead = false;
     } else {
       nbrinfo = new NbrInfo();
+      nbrinfo.MyNode = this;
       this.Neighbors.put(nbr, nbrinfo);
     }
     nbrinfo.Distance = Distance;
@@ -317,18 +319,10 @@ public class Node extends Zone implements IDeleteable {
     g2d.setColor(Color.red);
     g2d.fillOval((int) (this.Xloc - Radius), (int) (this.Yloc - Radius), (int) Diameter, (int) Diameter);
     NbrInfo ninf;
-    Node nbr;// also draw lines to all of my neighbors.
     g2d.setColor(Color.cyan);
     for (Map.Entry<Node, NbrInfo> kvp : this.Neighbors.entrySet()) {
       ninf = kvp.getValue();
-      if (!ninf.Dead) {
-        nbr = ninf.Nbr;
-        try {
-          g2d.drawLine((int) this.Xloc, (int) this.Yloc, (int) nbr.Xloc, (int) nbr.Yloc);
-        } catch (Exception ex) {
-          boolean nop = true;
-        }
-      }
+      ninf.Draw_Me(g2d);// also draw lines to all of my neighbors.
     }
   }
   /* ********************************************************************************************************* */
@@ -369,9 +363,14 @@ public class Node extends Zone implements IDeleteable {
   /* ********************************************************************************************************* */
   public static class NbrInfo implements IDeleteable {
     public Node Nbr;
+    public Node MyNode;
     public double Distance = Double.POSITIVE_INFINITY;
     public boolean Dead = false;
     public int RefCount = 0;
+    public Color MyColor;
+    public NbrInfo() {
+      MyColor = Color.cyan;
+    }
     public void MarkForRemoval() {
       Dead = true;
       Nbr = null;
@@ -382,9 +381,25 @@ public class Node extends Zone implements IDeleteable {
     public int UnRefMe() {
       return --RefCount;
     }
+    public void ReceivePacketToBuffer(Packet pkt) {
+      if (!this.Dead) {
+        //MyColor = Color.red;
+        MyColor = Color.getHSBColor(Display.rand.nextFloat(), Display.rand.nextFloat(), Display.rand.nextFloat());
+        this.Nbr.ReceivePacketToBuffer(pkt);
+      }
+    }
     @Override
     public void DeleteMe() {
-      //throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+      Nbr = null;
+      MyNode = null;
+      Distance = Double.POSITIVE_INFINITY;
+    }
+    /* ********************************************************************************************************* */
+    public void Draw_Me(Graphics2D g2d) {// Drawable
+      if (!this.Dead) {// draw lines to all of my neighbors.
+        g2d.setColor(MyColor);
+        g2d.drawLine((int) MyNode.Xloc, (int) MyNode.Yloc, (int) Nbr.Xloc, (int) Nbr.Yloc);
+      }
     }
   }
   /* ********************************************************************************************************* */

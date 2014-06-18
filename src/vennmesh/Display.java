@@ -23,7 +23,7 @@ public class Display {// 2d grid of nodes
   int MaxConnectionRadius = 1;
   int XOrg, YOrg;
   List<Node> Nodes;
-  Random rand = new Random();
+  public static Random rand = new Random();
   /* ********************************************************************************************************* */
   public Display() {
     XOrg = YOrg = 16;
@@ -65,10 +65,6 @@ public class Display {// 2d grid of nodes
     int X0, Y0, X1, Y1;
     int RegionWdt = this.GridWdt;
     int RegionHgt = this.GridHgt;
-    if (false) {
-      RegionWdt /= 2;
-      RegionHgt /= 2;
-    }
     int XMax = RegionWdt - 1;
     int YMax = RegionHgt - 1;
     for (int vcnt = 0; vcnt < RegionHgt; vcnt++) {
@@ -133,4 +129,34 @@ public class Display {// 2d grid of nodes
     g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);// Enable antialiasing for text
   }
   /* ********************************************************************************************************* */
+  void TriggerBlastPacket(int MouseX, int MouseY) {
+    double dx, dy, dist, MinDist = Double.MAX_VALUE;
+    Node closest = null;
+    int siz = Nodes.size();
+    for (int cnt = 0; cnt < siz; cnt++) {// clunky inefficient way to find closest node
+      Node nd = Nodes.get(cnt);
+      dx = (nd.Xloc - MouseX);
+      dy = (nd.Yloc - MouseY);
+      dist = Math.sqrt(dx * dx + dy * dy);
+      if (MinDist > dist) {
+        MinDist = dist;
+        closest = nd;
+      }
+    }
+    closest.LaunchMyOwnBlastPacket();
+  }
+  void BroadcastAllPackets() {
+    int siz = Nodes.size();
+    for (int cnt = 0; cnt < siz; cnt++) {
+      Node nd = Nodes.get(cnt);
+      nd.BroadcastAllPackets();
+    }
+  }
+  void ProcessInPacketBuffer() {
+    int siz = Nodes.size();
+    for (int cnt = 0; cnt < siz; cnt++) {
+      Node nd = Nodes.get(cnt);
+      nd.ProcessInPacketBuffer();
+    }
+  }
 }

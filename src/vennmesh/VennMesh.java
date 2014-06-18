@@ -115,6 +115,7 @@ public class VennMesh {
       this.addMouseListener(new java.awt.event.MouseAdapter() {
         @Override
         public void mouseClicked(java.awt.event.MouseEvent evt) {
+          display.TriggerBlastPacket(evt.getX(), evt.getY());
         }
         @Override
         public void mousePressed(java.awt.event.MouseEvent evt) {
@@ -166,8 +167,12 @@ public class VennMesh {
           Buffer = new BufferedImage(newSize.width, newSize.height, BufferedImage.TYPE_INT_ARGB);
           //Buffer = new BufferedImage(newSize.width, newSize.height, BufferedImage.TYPE_INT_RGB);
           GlobalGraphics = Buffer.createGraphics();
-          display.RandomizeAllConnections();
-          display.Draw_Me(GlobalGraphics);
+          //display.RandomizeAllConnections();
+          /*
+           display.BroadcastAllPackets();
+           display.ProcessInPacketBuffer();
+           display.Draw_Me(GlobalGraphics);
+           */
         }
         @Override
         public void componentMoved(ComponentEvent e) {
@@ -206,7 +211,11 @@ public class VennMesh {
       if (this.Buffer == null) {
         return;
       }
-      display.RandomizeAllConnections();
+      //display.RandomizeAllConnections();
+      {
+        display.BroadcastAllPackets();
+        display.ProcessInPacketBuffer();
+      }
       Rectangle screen = this.getBounds();// transformationContext.getScreen();
       //Color bg = new Color(0.5f, 0.5f, 0.5f);
       //Color bg = new Color(200, 255, 200);// nice light green
