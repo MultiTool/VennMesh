@@ -103,6 +103,7 @@ public class VennMesh {
     BufferedImage Buffer;
     Graphics2D GlobalGraphics;
     Display display;
+    Node TargetNode;
     /* *************************************************************************************************** */
     public Drawing_Canvas() {
       this.setName("Drawing_Canvas");
@@ -115,7 +116,13 @@ public class VennMesh {
       this.addMouseListener(new java.awt.event.MouseAdapter() {
         @Override
         public void mouseClicked(java.awt.event.MouseEvent evt) {
-          display.TriggerBlastPacket(evt.getX(), evt.getY());
+          if (SwingUtilities.isLeftMouseButton(evt)) {
+            TargetNode = display.TriggerBlastPacket(evt.getX(), evt.getY());
+          } else if (SwingUtilities.isRightMouseButton(evt)) {
+            display.Seek(evt.getX(), evt.getY(), TargetNode);
+          } else if (SwingUtilities.isMiddleMouseButton(evt)) {
+          } else {
+          }
         }
         @Override
         public void mousePressed(java.awt.event.MouseEvent evt) {
@@ -232,11 +239,19 @@ public class VennMesh {
       } catch (Exception ex) {
       }
       repaint(); // Repaint indirectly calls paintComponent.
+      VennMesh.IncrementTimeStamp();
     }
     /* *************************************************************************************************** */
     @Override
     public void update(Graphics g) {
       paint(g);
     }
+  }
+  public static int CurrentTime = 0;
+  public static int GetTimeStamp() {
+    return CurrentTime;
+  }
+  public static void IncrementTimeStamp() {
+    CurrentTime++;
   }
 }

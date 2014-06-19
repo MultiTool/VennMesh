@@ -26,7 +26,9 @@ public class Node extends Zone implements IDeleteable {
   public Map<Node, NbrInfo> Neighbors;
   public Map<Zone, RouteEntry> Routing;
   public List<Zone> ZoneVector;// my address
-  public LinkedList<Packet> PacketInBuf, PacketOutBuf;
+  public LinkedList<DataPacket> DataPacketInBuf, DataPacketOutBuf;
+  //public LinkedList<Packet> PacketInBuf, PacketOutBuf;
+  public LinkedList<BlastPacket> BlastPacketInBuf, BlastPacketOutBuf;
   /* ********************************************************************************************************* */
   public Node() {
     Xloc = 0;
@@ -34,8 +36,8 @@ public class Node extends Zone implements IDeleteable {
     Neighbors = new HashMap<Node, NbrInfo>();
     Routing = new HashMap<Zone, RouteEntry>();
     ZoneVector = new ArrayList<Zone>();// my address
-    PacketInBuf = new LinkedList<Packet>();
-    PacketOutBuf = new LinkedList<Packet>();
+    BlastPacketInBuf = new LinkedList<BlastPacket>();
+    BlastPacketOutBuf = new LinkedList<BlastPacket>();
   }
   /* ********************************************************************************************************* */
   public Node(WorldList Earth0) //: base()
@@ -44,46 +46,98 @@ public class Node extends Zone implements IDeleteable {
     this.Earth = Earth0;
   }
   /* ********************************************************************************************************* */
-  public void ReceivePacketToBuffer(Packet pkt) {// process a packet for distance updates
-    PacketInBuf.add(pkt);
+  public void ReceiveBlastPacketToBuffer(BlastPacket pkt) {// cache a packet for distance updates
+    BlastPacketInBuf.add(pkt);
+  }
+  /* ********************************************************************************************************* */
+  public void ReceiveDataPacketToBuffer(DataPacket pkt) {// cache a data packet
+    DataPacketInBuf.add(pkt);
   }
   /* ********************************************************************************************************* */
   public void LaunchMyOwnBlastPacket() {// emit my own packet to give everyone else my metrics
-    Packet pkt = new Packet();
+    BlastPacket pkt = new BlastPacket();
+    pkt.BirthTimeStamp = VennMesh.GetTimeStamp();
     pkt.Origin = this;
     pkt.Distance = 0;
     pkt.FieldStrength = 1.0;// if we are initiating our own blast, field strength is 1. 
     pkt.LatestSender = this;
-    PacketOutBuf.add(pkt);
+    BlastPacketOutBuf.add(pkt);
   }
   /* ********************************************************************************************************* */
   public void ProcessInPacketBuffer() {// process a packet for distance updates
-    Packet pkt, pktnext;
-    while (!PacketInBuf.isEmpty()) {
-      pkt = PacketInBuf.removeFirst();
-      pktnext = ProcessBlastPacket(pkt);
-      if (pktnext != null) {
-        PacketOutBuf.add(pktnext);
+    BlastPacket bpkt, BlastPktNext;
+    DataPacket dpkt, DataPktNext;
+    while (!BlastPacketInBuf.isEmpty()) {
+      bpkt = BlastPacketInBuf.removeFirst(); // if (TempPkt instanceof BlastPacket) { } ?
+      BlastPktNext = ProcessBlastPacket(bpkt);
+      bpkt.DeleteMe();
+      if (BlastPktNext != null) {
+        BlastPacketOutBuf.add(BlastPktNext);
       }
-      pkt.DeleteMe();
+    }
+    while (!DataPacketInBuf.isEmpty()) {
+      dpkt = DataPacketInBuf.removeFirst(); // if (TempPkt instanceof BlastPacket) { } ?
+      DataPktNext = ProcessDataPacket(dpkt);
+      dpkt.DeleteMe();
+      if (DataPktNext != null) {
+        DataPacketOutBuf.add(DataPktNext);
+      }
+    }
+
+    /*
+     Packet TempPkt, pktnext = null;
+     while (!BlastPacketInBuf.isEmpty()) {
+     TempPkt = BlastPacketInBuf.removeFirst(); // if (TempPkt instanceof BlastPacket) { } ?
+     if (TempPkt.MyType == PacketTypeEnum.BlastPacket) {// more like C++
+     bpkt = (BlastPacket) TempPkt;
+     pktnext = ProcessBlastPacket(bpkt);
+     bpkt.DeleteMe();
+     if (pktnext != null) {
+     BlastPacketOutBuf.add(pktnext);
+     }
+     } else if (TempPkt.MyType == PacketTypeEnum.DataPacket) {
+     dpkt = (DataPacket) TempPkt;
+     pktnext = ProcessDataPacket(dpkt);
+     dpkt.DeleteMe();// ? 
+     if (pktnext != null) {
+     DataPacketOutBuf.add(pktnext);
+     }
+     }
+     }
+     */
+
+  }
+  /* ********************************************************************************************************* */
+  private DataPacket ProcessDataPacket(DataPacket dpkt) {
+    throw new UnsupportedOperationException("Not supported yet."); // To change body of generated methods, choose Tools | Templates.
+  }
+  /* ********************************************************************************************************* */
+  public void SendAllDataPackets() {
+    DataPacket pkt;// go through all waiting outpackets, and send each to appropriate neighbor.
+    while (!DataPacketOutBuf.isEmpty()) {
+      pkt = DataPacketOutBuf.removeFirst();
+      // to do: get the best neighbor route before we reach this point. have it saved in the packet itself? 
+      NbrInfo ninfo;
+      ninfo.ReceiveDataPacketToBuffer(pkt);
+      //BroadcastBlastPacket(pkt);
     }
   }
   /* ********************************************************************************************************* */
-  public void BroadcastAllPackets() {
-    Packet pkt;// go through all waiting outpackets, and send each to all neighbors.
-    while (!PacketOutBuf.isEmpty()) {
-      pkt = PacketOutBuf.removeFirst();
-      BroadcastPacket(pkt);
+  public void BroadcastAllBlastPackets() {
+    BlastPacket pkt;// go through all waiting outpackets, and send each to all neighbors.
+    while (!BlastPacketOutBuf.isEmpty()) {
+      pkt = BlastPacketOutBuf.removeFirst();
+      BroadcastBlastPacket(pkt);
     }
   }
   /* ********************************************************************************************************* */
-  public Packet ProcessBlastPacket(Packet pkt) {// process a packet for distance updates
+  public BlastPacket ProcessBlastPacket(BlastPacket pkt) {// process a packet for distance updates
     Node nbr = pkt.LatestSender;
     //pkt.LatestSender = this;//?
     NbrInfo FromNbr = this.Neighbors.get(nbr);// nbr is the neighbor who handed me this packet
     //pkt.Distance += FromNbr.Distance;// now packet's distance will be my distance from endpoint
     RouteEntry MyKnowledgeOfEndpoint;
-    Packet PktNext = null;
+    BlastPacket PktNext = null;
     // when I get a blast packet, I look up its origin (as destination) in the routing table. 
     if (!this.Routing.containsKey(pkt.Origin)) {// if no entry is found, add it and forward the packet.
       // here is where we would flag if our routing table is too full
@@ -122,12 +176,12 @@ public class Node extends Zone implements IDeleteable {
     return PktNext;
   }
   /* ********************************************************************************************************* */
-  public void BroadcastPacket(Packet pkt) {
+  public void BroadcastBlastPacket(BlastPacket pkt) {
     Collection<NbrInfo> values = this.Neighbors.values();
-    Packet child;
+    BlastPacket child;
     for (NbrInfo ninfo : values) {// pass to all neighbors
       child = pkt.CloneMe();
-      ninfo.ReceivePacketToBuffer(child);
+      ninfo.ReceiveBlastPacketToBuffer(child);
     }
   }
   /* ********************************************************************************************************* */
@@ -255,8 +309,15 @@ public class Node extends Zone implements IDeleteable {
     }
   }
   /* ********************************************************************************************************* */
-  public void ReceiveRealPacket(Node nbr, Packet pkt) {// for routing and passing on real communication packets
-    Packet PktNext = null;
+  void SendPacketTo(Node TargetNode) {
+    DataPacket dp = new DataPacket();
+    dp.Destination = TargetNode;
+    this.DataPacketOutBuf.add(dp);
+    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+  }
+  /* ********************************************************************************************************* */
+  public void ReceiveRealPacket(Node nbr, BlastPacket pkt) {// for routing and passing on real communication packets
+    BlastPacket PktNext = null;
     RouteEntry entry = null;
     NbrInfo NextHop = null;
     entry = this.Routing.get(pkt.Origin);
@@ -335,17 +396,17 @@ public class Node extends Zone implements IDeleteable {
     public double FieldStrength = 0.0;// calculated from FieldFocus * field that reaches me, for strength of this particular endpoint. FieldIntensity?
     public double NextFieldStrength = 0.0;// calculated from FieldFocus * field that reaches me, for strength of this particular endpoint. FieldIntensity?
     public double FieldSum = 0.0;// temporary
-    public void ConsumePacket(Packet pkt) {
+    public void ConsumePacket(BlastPacket pkt) {
       this.BirthTimeStamp = pkt.BirthTimeStamp;// copy over best packet info
       this.Distance = pkt.Distance;
       this.EndPointNode = pkt.Origin;
       // and FieldStrength?
     }
-    public void ConsumePacket(NbrInfo nbr, Packet pkt) {
+    public void ConsumePacket(NbrInfo nbr, BlastPacket pkt) {
       this.ClosestNbr = nbr;// copy over best packet info
       this.ConsumePacket(pkt);
     }
-    public void AddFieldStrength(Packet pkt, double NumNbrs) {
+    public void AddFieldStrength(BlastPacket pkt, double NumNbrs) {
       this.FieldSum += pkt.FieldStrength;
       this.NextFieldStrength += 2.0 * (pkt.FieldStrength / NumNbrs);
       this.NextFieldStrength = Math.min(1.0, this.NextFieldStrength);
@@ -381,11 +442,18 @@ public class Node extends Zone implements IDeleteable {
     public int UnRefMe() {
       return --RefCount;
     }
-    public void ReceivePacketToBuffer(Packet pkt) {
+    public void ReceiveBlastPacketToBuffer(BlastPacket pkt) {
       if (!this.Dead) {
         //MyColor = Color.red;
         MyColor = Color.getHSBColor(Display.rand.nextFloat(), Display.rand.nextFloat(), Display.rand.nextFloat());
-        this.Nbr.ReceivePacketToBuffer(pkt);
+        this.Nbr.ReceiveBlastPacketToBuffer(pkt);
+      }
+    }
+    public void ReceiveDataPacketToBuffer(DataPacket pkt) {
+      if (!this.Dead) {
+        //MyColor = Color.red;
+        MyColor = Color.getHSBColor(Display.rand.nextFloat(), Display.rand.nextFloat(), Display.rand.nextFloat());
+        this.Nbr.ReceiveDataPacketToBuffer(pkt);
       }
     }
     @Override
@@ -403,19 +471,66 @@ public class Node extends Zone implements IDeleteable {
     }
   }
   /* ********************************************************************************************************* */
+  public enum PacketTypeEnum {
+    None, DataPacket, BlastPacket
+  };
+  /* ********************************************************************************************************* */
   public static class Packet implements IDeleteable {// this is a blast packet
+    public PacketTypeEnum MyType;
     public int BirthTimeStamp;
-    public double Distance;
-    public double FieldStrength;
     public Node Origin;
     public Node LatestSender;// most recent node who forwarded me
+    public Packet() {
+      this.BirthTimeStamp = VennMesh.GetTimeStamp();
+    }
+    public void CopyVals(Packet donor) {
+      this.BirthTimeStamp = donor.BirthTimeStamp;
+      this.Origin = donor.Origin;
+      this.LatestSender = donor.LatestSender;
+    }
     public Packet CloneMe() {
-      Packet child = new Packet();
-      child.BirthTimeStamp = this.BirthTimeStamp;
+      BlastPacket child = new BlastPacket();
+      child.CopyVals(this);
+      return child;
+    }
+    @Override
+    public void DeleteMe() {
+      BirthTimeStamp = Integer.MIN_VALUE;
+      Origin = null;
+      LatestSender = null;
+    }
+  }
+  /* ********************************************************************************************************* */
+  public static class DataPacket extends Packet {// this is a blast packet
+    public Node Destination;
+    public DataPacket() {//super();
+      MyType = PacketTypeEnum.DataPacket;
+    }
+    @Override
+    public DataPacket CloneMe() {
+      DataPacket child = new DataPacket();
+      child.CopyVals(this);
+      return child;
+    }
+    @Override
+    public void DeleteMe() {
+      super.DeleteMe();
+    }
+  }
+  /* ********************************************************************************************************* */
+  public static class BlastPacket extends Packet {// this is a blast packet
+    public double Distance;
+    public double FieldStrength;
+    public BlastPacket() {
+      //super();
+      MyType = PacketTypeEnum.BlastPacket;
+    }
+    @Override
+    public BlastPacket CloneMe() {
+      BlastPacket child = new BlastPacket();
+      child.CopyVals(this);
       child.Distance = this.Distance;
       child.FieldStrength = this.FieldStrength;
-      child.Origin = this.Origin;
-      child.LatestSender = this.LatestSender;
       return child;
     }
     public void UpdateForResend(Node Sender, double NextDist, double FieldFocus) {
@@ -425,7 +540,9 @@ public class Node extends Zone implements IDeleteable {
     }
     @Override
     public void DeleteMe() {
-      //throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+      super.DeleteMe();
+      Distance = Double.POSITIVE_INFINITY;
+      FieldStrength = Double.NEGATIVE_INFINITY;
     }
   }
 }

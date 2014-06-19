@@ -129,7 +129,7 @@ public class Display {// 2d grid of nodes
     g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);// Enable antialiasing for text
   }
   /* ********************************************************************************************************* */
-  void TriggerBlastPacket(int MouseX, int MouseY) {
+  Node FindClosestNode(int MouseX, int MouseY) {
     double dx, dy, dist, MinDist = Double.MAX_VALUE;
     Node closest = null;
     int siz = Nodes.size();
@@ -143,13 +143,20 @@ public class Display {// 2d grid of nodes
         closest = nd;
       }
     }
+    return closest;
+  }
+  /* ********************************************************************************************************* */
+  Node TriggerBlastPacket(int MouseX, int MouseY) {
+    double dx, dy, dist, MinDist = Double.MAX_VALUE;
+    Node closest = FindClosestNode(MouseX, MouseY);
     closest.LaunchMyOwnBlastPacket();
+    return closest;
   }
   void BroadcastAllPackets() {
     int siz = Nodes.size();
     for (int cnt = 0; cnt < siz; cnt++) {
       Node nd = Nodes.get(cnt);
-      nd.BroadcastAllPackets();
+      nd.BroadcastAllBlastPackets();
     }
   }
   void ProcessInPacketBuffer() {
@@ -158,5 +165,9 @@ public class Display {// 2d grid of nodes
       Node nd = Nodes.get(cnt);
       nd.ProcessInPacketBuffer();
     }
+  }
+  void Seek(int MouseX, int MouseY, Node TargetNode) {
+    Node seeker = FindClosestNode(MouseX, MouseY);
+    seeker.SendPacketTo(TargetNode);
   }
 }
