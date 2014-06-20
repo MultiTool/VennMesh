@@ -4,8 +4,10 @@ package vennmesh;
 
  @author MultiTool
  */
+import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Graphics2D;
+import java.awt.Stroke;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -38,6 +40,8 @@ public class Node extends Zone implements IDeleteable {
     ZoneVector = new ArrayList<Zone>();// my address
     BlastPacketInBuf = new LinkedList<BlastPacket>();
     BlastPacketOutBuf = new LinkedList<BlastPacket>();
+    DataPacketInBuf = new LinkedList<DataPacket>();
+    DataPacketOutBuf = new LinkedList<DataPacket>();
   }
   /* ********************************************************************************************************* */
   public Node(WorldList Earth0) //: base()
@@ -83,7 +87,6 @@ public class Node extends Zone implements IDeleteable {
         DataPacketOutBuf.add(DataPktNext);
       }
     }
-
     /*
      Packet TempPkt, pktnext = null;
      while (!BlastPacketInBuf.isEmpty()) {
@@ -109,17 +112,23 @@ public class Node extends Zone implements IDeleteable {
   }
   /* ********************************************************************************************************* */
   private DataPacket ProcessDataPacket(DataPacket dpkt) {
-    throw new UnsupportedOperationException("Not supported yet."); // To change body of generated methods, choose Tools | Templates.
+    DataPacket retval = null;
+    if (this.Routing.containsKey(dpkt.Destination)) {
+      retval = dpkt.CloneMe();
+    }
+    return retval;
   }
   /* ********************************************************************************************************* */
   public void SendAllDataPackets() {
+    RouteEntry MyKnowledgeOfDestination;
     DataPacket pkt;// go through all waiting outpackets, and send each to appropriate neighbor.
     while (!DataPacketOutBuf.isEmpty()) {
       pkt = DataPacketOutBuf.removeFirst();
-      // to do: get the best neighbor route before we reach this point. have it saved in the packet itself? 
-      NbrInfo ninfo;
-      ninfo.ReceiveDataPacketToBuffer(pkt);
-      //BroadcastBlastPacket(pkt);
+      if (this.Routing.containsKey(pkt.Destination)) {
+        MyKnowledgeOfDestination = this.Routing.get(pkt.Destination);
+        NbrInfo ToNbr = MyKnowledgeOfDestination.ClosestNbr;
+        ToNbr.ReceiveDataPacketToBuffer(pkt);
+      }
     }
   }
   /* ********************************************************************************************************* */
@@ -147,7 +156,7 @@ public class Node extends Zone implements IDeleteable {
       this.Routing.put(pkt.Origin, MyKnowledgeOfEndpoint);
       FromNbr.RefMe();
       PktNext = pkt.CloneMe();
-      PktNext.UpdateForResend(this, FromNbr.Distance, MyKnowledgeOfEndpoint.FieldFocus);// now child's field strength will be the strength of field at me
+      PktNext.UpdateForResend(this, FromNbr.Distance, MyKnowledgeOfEndpoint.FieldStrength);// now child's field strength will be the strength of field at me .FieldFocus
       //PktNext.LatestSender = this; PktNext.FieldStrength *= MyKnowledgeOfEndpoint.FieldFocus;// now child's field strength will be the strength of field at me
     } else {
       MyKnowledgeOfEndpoint = this.Routing.get(pkt.Origin);
@@ -158,7 +167,7 @@ public class Node extends Zone implements IDeleteable {
         MyKnowledgeOfEndpoint.AddFieldStrength(pkt, this.Neighbors.size());
         FromNbr.RefMe();
         PktNext = pkt.CloneMe();
-        PktNext.UpdateForResend(this, FromNbr.Distance, MyKnowledgeOfEndpoint.FieldFocus);
+        PktNext.UpdateForResend(this, FromNbr.Distance, MyKnowledgeOfEndpoint.FieldStrength);// now child's field strength will be the strength of field at me .FieldFocus
         //PktNext.LatestSender = this; PktNext.FieldStrength *= MyKnowledgeOfEndpoint.FieldFocus;// now child's field strength will be the strength of field at me
       } else if (pkt.BirthTimeStamp == MyKnowledgeOfEndpoint.BirthTimeStamp) {// if its birth time is the same as the current entry
         if (pkt.Distance < MyKnowledgeOfEndpoint.Distance) {// if it has better miles than the current entry, replace the current entry and forward the packet.
@@ -167,7 +176,7 @@ public class Node extends Zone implements IDeleteable {
           MyKnowledgeOfEndpoint.AddFieldStrength(pkt, this.Neighbors.size());
           FromNbr.RefMe();
           PktNext = pkt.CloneMe();
-          PktNext.UpdateForResend(this, FromNbr.Distance, MyKnowledgeOfEndpoint.FieldFocus);
+          PktNext.UpdateForResend(this, FromNbr.Distance, MyKnowledgeOfEndpoint.FieldStrength);// now child's field strength will be the strength of field at me .FieldFocus
           //PktNext.LatestSender = this; PktNext.FieldStrength *= MyKnowledgeOfEndpoint.FieldFocus;// now child's field strength will be the strength of field at me
         }
       }
@@ -313,7 +322,6 @@ public class Node extends Zone implements IDeleteable {
     DataPacket dp = new DataPacket();
     dp.Destination = TargetNode;
     this.DataPacketOutBuf.add(dp);
-    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
   }
   /* ********************************************************************************************************* */
   public void ReceiveRealPacket(Node nbr, BlastPacket pkt) {// for routing and passing on real communication packets
@@ -375,9 +383,41 @@ public class Node extends Zone implements IDeleteable {
   }
   /* ********************************************************************************************************* */
   public void Draw_Me(Graphics2D g2d) {// Drawable
-    double Radius = 3;
+    double Radius = 12;
     double Diameter = Radius * 2;
-    g2d.setColor(Color.red);
+
+    if (this.Routing.size() > 0) {
+      ArrayList<RouteEntry> vals = new ArrayList(this.Routing.values());
+      float fstrength = (float) (vals.get(0).FieldStrength);
+      if (fstrength > 1.0) {
+        boolean nop = true;
+      }
+      //System.out.println("" + fstrength + ";");
+      //Color MyColor = Color.getHSBColor(fstrength, fstrength, fstrength);
+      Color MyColor = new Color(fstrength, fstrength, fstrength);
+      if (fstrength > 1.0 / 4.0) {
+        MyColor = new Color(fstrength, 0.0f, 0.0f);
+      } else if (fstrength > 1.0 / 16.0) {
+        MyColor = new Color(0.0f, fstrength * 4.0f, 0.0f);
+      } else if (fstrength > 1.0 / 64.0) {
+        MyColor = new Color(0.0f, 0.0f, fstrength * 16.0f);
+      } else if (fstrength > 0.0) {// 1.0 / (4.0 * 64.0)) {
+        MyColor = new Color(fstrength * 64.0f, 0.0f, 0.0f);
+      } else {
+        MyColor = Color.yellow;
+      }
+
+      g2d.setColor(MyColor);
+      if (false) {
+        if (fstrength > 0) {
+          g2d.setColor(Color.yellow);
+        } else {
+          g2d.setColor(Color.black);
+        }
+      }
+    } else {
+      g2d.setColor(Color.red);
+    }
     g2d.fillOval((int) (this.Xloc - Radius), (int) (this.Yloc - Radius), (int) Diameter, (int) Diameter);
     NbrInfo ninf;
     g2d.setColor(Color.cyan);
@@ -409,6 +449,7 @@ public class Node extends Zone implements IDeleteable {
     public void AddFieldStrength(BlastPacket pkt, double NumNbrs) {
       this.FieldSum += pkt.FieldStrength;
       this.NextFieldStrength += 2.0 * (pkt.FieldStrength / NumNbrs);
+      //this.NextFieldStrength += 1.0 * (pkt.FieldStrength / NumNbrs);
       this.NextFieldStrength = Math.min(1.0, this.NextFieldStrength);
     }
     public void RolloverFieldStrength() {
@@ -418,7 +459,14 @@ public class Node extends Zone implements IDeleteable {
     }
     @Override
     public void DeleteMe() {
-      throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+      EndPointNode = null;// mess up all these values so that if this object is reused it will throw an error
+      BirthTimeStamp = Integer.MIN_VALUE;
+      Distance = Double.POSITIVE_INFINITY;
+      ClosestNbr = null;
+      FieldFocus = Double.NEGATIVE_INFINITY;
+      FieldStrength = Double.NEGATIVE_INFINITY;
+      NextFieldStrength = Double.NEGATIVE_INFINITY;
+      FieldSum = Double.NEGATIVE_INFINITY;
     }
   }
   /* ********************************************************************************************************* */
@@ -429,8 +477,10 @@ public class Node extends Zone implements IDeleteable {
     public boolean Dead = false;
     public int RefCount = 0;
     public Color MyColor;
+    public Stroke MyStroke;
     public NbrInfo() {
       MyColor = Color.cyan;
+      MyStroke = new BasicStroke(1);
     }
     public void MarkForRemoval() {
       Dead = true;
@@ -444,15 +494,17 @@ public class Node extends Zone implements IDeleteable {
     }
     public void ReceiveBlastPacketToBuffer(BlastPacket pkt) {
       if (!this.Dead) {
-        //MyColor = Color.red;
-        MyColor = Color.getHSBColor(Display.rand.nextFloat(), Display.rand.nextFloat(), Display.rand.nextFloat());
+        //MyColor = Color.getHSBColor(Display.rand.nextFloat(), Display.rand.nextFloat(), Display.rand.nextFloat());
+        MyColor = new Color(Display.rand.nextFloat(), Display.rand.nextFloat(), Display.rand.nextFloat());
+        MyStroke = new BasicStroke(1);
         this.Nbr.ReceiveBlastPacketToBuffer(pkt);
       }
     }
     public void ReceiveDataPacketToBuffer(DataPacket pkt) {
       if (!this.Dead) {
-        //MyColor = Color.red;
-        MyColor = Color.getHSBColor(Display.rand.nextFloat(), Display.rand.nextFloat(), Display.rand.nextFloat());
+        MyColor = Color.red;
+        MyStroke = new BasicStroke(4);
+        //MyColor = Color.getHSBColor(Display.rand.nextFloat(), Display.rand.nextFloat(), Display.rand.nextFloat());
         this.Nbr.ReceiveDataPacketToBuffer(pkt);
       }
     }
@@ -466,6 +518,7 @@ public class Node extends Zone implements IDeleteable {
     public void Draw_Me(Graphics2D g2d) {// Drawable
       if (!this.Dead) {// draw lines to all of my neighbors.
         g2d.setColor(MyColor);
+        g2d.setStroke(MyStroke);
         g2d.drawLine((int) MyNode.Xloc, (int) MyNode.Yloc, (int) Nbr.Xloc, (int) Nbr.Yloc);
       }
     }
@@ -484,6 +537,7 @@ public class Node extends Zone implements IDeleteable {
       this.BirthTimeStamp = VennMesh.GetTimeStamp();
     }
     public void CopyVals(Packet donor) {
+      this.MyType = donor.MyType;
       this.BirthTimeStamp = donor.BirthTimeStamp;
       this.Origin = donor.Origin;
       this.LatestSender = donor.LatestSender;
@@ -494,7 +548,7 @@ public class Node extends Zone implements IDeleteable {
       return child;
     }
     @Override
-    public void DeleteMe() {
+    public void DeleteMe() {// mess up all these values so that if this object is reused it will throw an error
       BirthTimeStamp = Integer.MIN_VALUE;
       Origin = null;
       LatestSender = null;
@@ -510,11 +564,13 @@ public class Node extends Zone implements IDeleteable {
     public DataPacket CloneMe() {
       DataPacket child = new DataPacket();
       child.CopyVals(this);
+      child.Destination = this.Destination;
       return child;
     }
     @Override
     public void DeleteMe() {
       super.DeleteMe();
+      Destination = null;
     }
   }
   /* ********************************************************************************************************* */
@@ -536,7 +592,8 @@ public class Node extends Zone implements IDeleteable {
     public void UpdateForResend(Node Sender, double NextDist, double FieldFocus) {
       this.LatestSender = Sender;
       this.Distance += NextDist;// now packet's distance will be my distance from endpoint
-      this.FieldStrength *= FieldFocus;// now child's field strength will be the strength of field at me
+      //this.FieldStrength *= FieldFocus;// now child's field strength will be the strength of field at me
+      this.FieldStrength = FieldFocus;
     }
     @Override
     public void DeleteMe() {

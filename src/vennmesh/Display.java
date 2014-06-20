@@ -157,6 +157,7 @@ public class Display {// 2d grid of nodes
     for (int cnt = 0; cnt < siz; cnt++) {
       Node nd = Nodes.get(cnt);
       nd.BroadcastAllBlastPackets();
+      nd.SendAllDataPackets();
     }
   }
   void ProcessInPacketBuffer() {
