@@ -167,7 +167,7 @@ public class Display {// 2d grid of nodes
       nd.ProcessInPacketBuffer();
     }
   }
-  void Seek(int MouseX, int MouseY, Node TargetNode) {
+  void Seek(int MouseX, int MouseY, Zone TargetNode) {
     Node seeker = FindClosestNode(MouseX, MouseY);
     seeker.SendPacketTo(TargetNode);
   }

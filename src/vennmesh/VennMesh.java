@@ -119,7 +119,7 @@ public class VennMesh {
           if (SwingUtilities.isLeftMouseButton(evt)) {
             TargetNode = display.TriggerBlastPacket(evt.getX(), evt.getY());
           } else if (SwingUtilities.isRightMouseButton(evt)) {
-            display.Seek(evt.getX(), evt.getY(), TargetNode);
+            display.Seek(evt.getX(), evt.getY(), TargetNode.MeZone);
           } else if (SwingUtilities.isMiddleMouseButton(evt)) {
           } else {
           }
@@ -235,7 +235,7 @@ public class VennMesh {
       //http://www.realapplets.com/tutorial/DoubleBuffering.html
       /* http://download.oracle.com/javase/tutorial/2d/images/drawonimage.html */
       try {
-        Thread.sleep(500);
+        //Thread.sleep(500);
       } catch (Exception ex) {
       }
       repaint(); // Repaint indirectly calls paintComponent.
@@ -246,6 +246,10 @@ public class VennMesh {
     public void update(Graphics g) {
       paint(g);
     }
+  }
+  public static int CurrentId = 0;
+  public static int GetNewId() {
+    return CurrentId++;
   }
   public static int CurrentTime = 0;
   public static int GetTimeStamp() {

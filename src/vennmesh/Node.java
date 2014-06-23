@@ -22,11 +22,12 @@ import java.util.Random;
 import java.util.Set;
 
 /* ********************************************************************************************************* */
-public class Node extends Zone implements IDeleteable {
+public class Node implements IDeleteable {
   public double Xloc, Yloc;
   public WorldList Earth;
   public Map<Node, NbrInfo> Neighbors;
   public Map<Zone, RouteEntry> Routing;
+  public Zone MeZone;
   public List<Zone> ZoneVector;// my address
   public LinkedList<DataPacket> DataPacketInBuf, DataPacketOutBuf;
   //public LinkedList<Packet> PacketInBuf, PacketOutBuf;
@@ -35,9 +36,12 @@ public class Node extends Zone implements IDeleteable {
   public Node() {
     Xloc = 0;
     Yloc = 0;
+    this.MeZone = new Zone();
+    ZoneVector = new ArrayList<Zone>();// my address
+    ZoneVector.add(MeZone);// I am always a member of my own personal zone
+
     Neighbors = new HashMap<Node, NbrInfo>();
     Routing = new HashMap<Zone, RouteEntry>();
-    ZoneVector = new ArrayList<Zone>();// my address
     BlastPacketInBuf = new LinkedList<BlastPacket>();
     BlastPacketOutBuf = new LinkedList<BlastPacket>();
     DataPacketInBuf = new LinkedList<DataPacket>();
@@ -61,7 +65,7 @@ public class Node extends Zone implements IDeleteable {
   public void LaunchMyOwnBlastPacket() {// emit my own packet to give everyone else my metrics
     BlastPacket pkt = new BlastPacket();
     pkt.BirthTimeStamp = VennMesh.GetTimeStamp();
-    pkt.Origin = this;
+    pkt.OriginZone = this.MeZone;
     pkt.Distance = 0;
     pkt.FieldStrength = 1.0;// if we are initiating our own blast, field strength is 1. 
     pkt.LatestSender = this;
@@ -141,25 +145,34 @@ public class Node extends Zone implements IDeleteable {
   }
   /* ********************************************************************************************************* */
   public BlastPacket ProcessBlastPacket(BlastPacket pkt) {// process a packet for distance updates
+    BlastPacket PktNext = null;
     Node nbr = pkt.LatestSender;
     //pkt.LatestSender = this;//?
     NbrInfo FromNbr = this.Neighbors.get(nbr);// nbr is the neighbor who handed me this packet
+
+    if (this.ZoneVector.contains(pkt.OriginZone)) {
+      /*
+       first, if I am a member of the same zone that launched this packet, disregard it. no gradients of a zone inside that zone.
+      what happens if a node disobeys this?
+       */
+      return null;
+    }
+
     //pkt.Distance += FromNbr.Distance;// now packet's distance will be my distance from endpoint
     RouteEntry MyKnowledgeOfEndpoint;
-    BlastPacket PktNext = null;
     // when I get a blast packet, I look up its origin (as destination) in the routing table. 
-    if (!this.Routing.containsKey(pkt.Origin)) {// if no entry is found, add it and forward the packet.
+    if (!this.Routing.containsKey(pkt.OriginZone)) {// if no entry is found, add it and forward the packet.
       // here is where we would flag if our routing table is too full
       MyKnowledgeOfEndpoint = new RouteEntry();
       MyKnowledgeOfEndpoint.ConsumePacket(FromNbr, pkt);
       MyKnowledgeOfEndpoint.AddFieldStrength(pkt, this.Neighbors.size());
-      this.Routing.put(pkt.Origin, MyKnowledgeOfEndpoint);
+      this.Routing.put(pkt.OriginZone, MyKnowledgeOfEndpoint);
       FromNbr.RefMe();
       PktNext = pkt.CloneMe();
       PktNext.UpdateForResend(this, FromNbr.Distance, MyKnowledgeOfEndpoint.FieldStrength);// now child's field strength will be the strength of field at me .FieldFocus
       //PktNext.LatestSender = this; PktNext.FieldStrength *= MyKnowledgeOfEndpoint.FieldFocus;// now child's field strength will be the strength of field at me
     } else {
-      MyKnowledgeOfEndpoint = this.Routing.get(pkt.Origin);
+      MyKnowledgeOfEndpoint = this.Routing.get(pkt.OriginZone);
       if (pkt.BirthTimeStamp > MyKnowledgeOfEndpoint.BirthTimeStamp) {// if its birth time is more recent than the existing entry, replace the old entry and forward the packet.
         MyKnowledgeOfEndpoint.ClosestNbr.UnRefMe();
         MyKnowledgeOfEndpoint.ConsumePacket(FromNbr, pkt);
@@ -318,7 +331,7 @@ public class Node extends Zone implements IDeleteable {
     }
   }
   /* ********************************************************************************************************* */
-  void SendPacketTo(Node TargetNode) {
+  void SendPacketTo(Zone TargetNode) {
     DataPacket dp = new DataPacket();
     dp.Destination = TargetNode;
     this.DataPacketOutBuf.add(dp);
@@ -328,7 +341,7 @@ public class Node extends Zone implements IDeleteable {
     BlastPacket PktNext = null;
     RouteEntry entry = null;
     NbrInfo NextHop = null;
-    entry = this.Routing.get(pkt.Origin);
+    entry = this.Routing.get(pkt.OriginZone);
     NextHop = entry.ClosestNbr;
     PktNext = pkt.CloneMe();
     PktNext.Distance += NextHop.Distance;// snox packet receiver should probably inc distance on receipt. then actual measured time might be used.
@@ -428,7 +441,7 @@ public class Node extends Zone implements IDeleteable {
   }
   /* ********************************************************************************************************* */
   public static class RouteEntry implements IDeleteable {
-    public Node EndPointNode;// this is the same as the hash key that finds this record
+    public Zone EndPointNode;// this is the same as the hash key that finds this record
     public int BirthTimeStamp;
     public double Distance;
     public NbrInfo ClosestNbr;
@@ -439,7 +452,7 @@ public class Node extends Zone implements IDeleteable {
     public void ConsumePacket(BlastPacket pkt) {
       this.BirthTimeStamp = pkt.BirthTimeStamp;// copy over best packet info
       this.Distance = pkt.Distance;
-      this.EndPointNode = pkt.Origin;
+      this.EndPointNode = pkt.OriginZone;
       // and FieldStrength?
     }
     public void ConsumePacket(NbrInfo nbr, BlastPacket pkt) {
@@ -531,7 +544,7 @@ public class Node extends Zone implements IDeleteable {
   public static class Packet implements IDeleteable {// this is a blast packet
     public PacketTypeEnum MyType;
     public int BirthTimeStamp;
-    public Node Origin;
+    public Zone OriginZone;
     public Node LatestSender;// most recent node who forwarded me
     public Packet() {
       this.BirthTimeStamp = VennMesh.GetTimeStamp();
@@ -539,7 +552,7 @@ public class Node extends Zone implements IDeleteable {
     public void CopyVals(Packet donor) {
       this.MyType = donor.MyType;
       this.BirthTimeStamp = donor.BirthTimeStamp;
-      this.Origin = donor.Origin;
+      this.OriginZone = donor.OriginZone;
       this.LatestSender = donor.LatestSender;
     }
     public Packet CloneMe() {
@@ -550,13 +563,13 @@ public class Node extends Zone implements IDeleteable {
     @Override
     public void DeleteMe() {// mess up all these values so that if this object is reused it will throw an error
       BirthTimeStamp = Integer.MIN_VALUE;
-      Origin = null;
+      OriginZone = null;
       LatestSender = null;
     }
   }
   /* ********************************************************************************************************* */
   public static class DataPacket extends Packet {// this is a blast packet
-    public Node Destination;
+    public Zone Destination;
     public DataPacket() {//super();
       MyType = PacketTypeEnum.DataPacket;
     }
