@@ -63,9 +63,24 @@ public class Node implements IDeleteable {
   }
   /* ********************************************************************************************************* */
   public void LaunchMyOwnBlastPacket() {// emit my own packet to give everyone else my metrics
+    LaunchMyOwnBlastPacket(this.MeZone);
+    /*
+     BlastPacket pkt = new BlastPacket();
+     pkt.BirthTimeStamp = VennMesh.GetTimeStamp();
+     pkt.SerialNumber = this.MeZone.GetLatestSerialNumber();
+     pkt.OriginZone = this.MeZone;
+     pkt.Distance = 0;
+     pkt.FieldStrength = 1.0;// if we are initiating our own blast, field strength is 1. 
+     pkt.LatestSender = this;
+     BlastPacketOutBuf.add(pkt);
+     */
+  }
+  /* ********************************************************************************************************* */
+  public void LaunchMyOwnBlastPacket(Zone StartZone) {// emit my own packet to give everyone else the metrics of one of my address zones
     BlastPacket pkt = new BlastPacket();
     pkt.BirthTimeStamp = VennMesh.GetTimeStamp();
-    pkt.OriginZone = this.MeZone;
+    pkt.SerialNumber = StartZone.LatestSerialNumber;//.GetLatestSerialNumber();
+    pkt.OriginZone = StartZone;
     pkt.Distance = 0;
     pkt.FieldStrength = 1.0;// if we are initiating our own blast, field strength is 1. 
     pkt.LatestSender = this;
@@ -153,7 +168,7 @@ public class Node implements IDeleteable {
     if (this.ZoneVector.contains(pkt.OriginZone)) {
       /*
        first, if I am a member of the same zone that launched this packet, disregard it. no gradients of a zone inside that zone.
-      what happens if a node disobeys this?
+       what happens if a node disobeys this?
        */
       return null;
     }
@@ -173,7 +188,7 @@ public class Node implements IDeleteable {
       //PktNext.LatestSender = this; PktNext.FieldStrength *= MyKnowledgeOfEndpoint.FieldFocus;// now child's field strength will be the strength of field at me
     } else {
       MyKnowledgeOfEndpoint = this.Routing.get(pkt.OriginZone);
-      if (pkt.BirthTimeStamp > MyKnowledgeOfEndpoint.BirthTimeStamp) {// if its birth time is more recent than the existing entry, replace the old entry and forward the packet.
+      if (pkt.SerialNumber > MyKnowledgeOfEndpoint.LatestSerialNumber) {// if its birth time is more recent than the existing entry, replace the old entry and forward the packet.
         MyKnowledgeOfEndpoint.ClosestNbr.UnRefMe();
         MyKnowledgeOfEndpoint.ConsumePacket(FromNbr, pkt);
         MyKnowledgeOfEndpoint.RolloverFieldStrength();// old packet is surpassed, close the deal?
@@ -182,7 +197,7 @@ public class Node implements IDeleteable {
         PktNext = pkt.CloneMe();
         PktNext.UpdateForResend(this, FromNbr.Distance, MyKnowledgeOfEndpoint.FieldStrength);// now child's field strength will be the strength of field at me .FieldFocus
         //PktNext.LatestSender = this; PktNext.FieldStrength *= MyKnowledgeOfEndpoint.FieldFocus;// now child's field strength will be the strength of field at me
-      } else if (pkt.BirthTimeStamp == MyKnowledgeOfEndpoint.BirthTimeStamp) {// if its birth time is the same as the current entry
+      } else if (pkt.SerialNumber == MyKnowledgeOfEndpoint.LatestSerialNumber) {// if its birth time is the same as the current entry
         if (pkt.Distance < MyKnowledgeOfEndpoint.Distance) {// if it has better miles than the current entry, replace the current entry and forward the packet.
           MyKnowledgeOfEndpoint.ClosestNbr.UnRefMe();
           MyKnowledgeOfEndpoint.ConsumePacket(FromNbr, pkt);
@@ -320,7 +335,14 @@ public class Node implements IDeleteable {
   /* ********************************************************************************************************* */
   @Override
   public void DeleteMe() {
-    //throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+    /* call DeleteMe on all of these:
+     Map<Node, NbrInfo> Neighbors;
+     Map<Zone, RouteEntry> Routing;
+     Zone MeZone;
+     List<Zone> ZoneVector;// my address
+     LinkedList<DataPacket> DataPacketInBuf, DataPacketOutBuf;
+     LinkedList<BlastPacket> BlastPacketInBuf, BlastPacketOutBuf;
+     */
   }
   /* ********************************************************************************************************* */
   public class EndpointFocusComparer implements Comparator<RouteEntry> {
@@ -331,9 +353,9 @@ public class Node implements IDeleteable {
     }
   }
   /* ********************************************************************************************************* */
-  void SendPacketTo(Zone TargetNode) {
+  void SendPacketTo(Zone TargetZone) {
     DataPacket dp = new DataPacket();
-    dp.Destination = TargetNode;
+    dp.Destination = TargetZone;
     this.DataPacketOutBuf.add(dp);
   }
   /* ********************************************************************************************************* */
@@ -442,6 +464,7 @@ public class Node implements IDeleteable {
   /* ********************************************************************************************************* */
   public static class RouteEntry implements IDeleteable {
     public Zone EndPointNode;// this is the same as the hash key that finds this record
+    public int LatestSerialNumber;
     public int BirthTimeStamp;
     public double Distance;
     public NbrInfo ClosestNbr;
@@ -450,7 +473,7 @@ public class Node implements IDeleteable {
     public double NextFieldStrength = 0.0;// calculated from FieldFocus * field that reaches me, for strength of this particular endpoint. FieldIntensity?
     public double FieldSum = 0.0;// temporary
     public void ConsumePacket(BlastPacket pkt) {
-      this.BirthTimeStamp = pkt.BirthTimeStamp;// copy over best packet info
+      this.LatestSerialNumber = pkt.SerialNumber;// copy over best packet info
       this.Distance = pkt.Distance;
       this.EndPointNode = pkt.OriginZone;
       // and FieldStrength?
@@ -473,7 +496,7 @@ public class Node implements IDeleteable {
     @Override
     public void DeleteMe() {
       EndPointNode = null;// mess up all these values so that if this object is reused it will throw an error
-      BirthTimeStamp = Integer.MIN_VALUE;
+      LatestSerialNumber = Integer.MIN_VALUE;
       Distance = Double.POSITIVE_INFINITY;
       ClosestNbr = null;
       FieldFocus = Double.NEGATIVE_INFINITY;
@@ -543,15 +566,16 @@ public class Node implements IDeleteable {
   /* ********************************************************************************************************* */
   public static class Packet implements IDeleteable {// this is a blast packet
     public PacketTypeEnum MyType;
+    public int SerialNumber;
     public int BirthTimeStamp;
     public Zone OriginZone;
     public Node LatestSender;// most recent node who forwarded me
     public Packet() {
-      this.BirthTimeStamp = VennMesh.GetTimeStamp();
+      this.SerialNumber = VennMesh.GetTimeStamp();
     }
     public void CopyVals(Packet donor) {
       this.MyType = donor.MyType;
-      this.BirthTimeStamp = donor.BirthTimeStamp;
+      this.SerialNumber = donor.SerialNumber;
       this.OriginZone = donor.OriginZone;
       this.LatestSender = donor.LatestSender;
     }
@@ -562,7 +586,7 @@ public class Node implements IDeleteable {
     }
     @Override
     public void DeleteMe() {// mess up all these values so that if this object is reused it will throw an error
-      BirthTimeStamp = Integer.MIN_VALUE;
+      SerialNumber = Integer.MIN_VALUE;
       OriginZone = null;
       LatestSender = null;
     }

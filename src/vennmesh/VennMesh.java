@@ -119,7 +119,8 @@ public class VennMesh {
           if (SwingUtilities.isLeftMouseButton(evt)) {
             TargetNode = display.TriggerBlastPacket(evt.getX(), evt.getY());
           } else if (SwingUtilities.isRightMouseButton(evt)) {
-            display.Seek(evt.getX(), evt.getY(), TargetNode.MeZone);
+            //display.Seek(evt.getX(), evt.getY(), TargetNode.MeZone);
+            display.Seek(evt.getX(), evt.getY(), display.TestZone);
           } else if (SwingUtilities.isMiddleMouseButton(evt)) {
           } else {
           }

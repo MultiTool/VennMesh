@@ -11,12 +11,23 @@ package vennmesh;
 public class Zone implements IDeleteable {//ZoneId
   public String ZoneName;
   int ZoneId;
+  int LatestSerialNumber = 0;
+  /* ********************************************************************************************************* */
   public Zone() {
     this.ZoneId = VennMesh.GetNewId();
   }
   @Override
   public void DeleteMe() {
   }
+  /* ********************************************************************************************************* */
+  public Zone CloneMe() {
+    Zone child = new Zone();
+    child.ZoneName = this.ZoneName;
+    child.ZoneId = this.ZoneId;
+    child.LatestSerialNumber = this.LatestSerialNumber;
+    return child;
+  }
+  /* ********************************************************************************************************* */
   @Override
   public int hashCode() {
     return ZoneId;
@@ -34,5 +45,9 @@ public class Zone implements IDeleteable {//ZoneId
       return false;
     }
     return true;
+  }
+  /* ********************************************************************************************************* */
+  public int GetLatestSerialNumber() {
+    return LatestSerialNumber++;
   }
 }

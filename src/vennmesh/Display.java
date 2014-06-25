@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Random;
 
 /* ********************************************************************************************************* */
-public class Display {// 2d grid of nodes
+public class Display implements IDeleteable {// 2d grid of nodes
   int GridWdt = 16, GridHgt = 16;
   //double ConnectionDensity = 0.2;
   double ConnectionDensity = 0.5;
@@ -23,6 +23,8 @@ public class Display {// 2d grid of nodes
   int MaxConnectionRadius = 1;
   int XOrg, YOrg;
   List<Node> Nodes;
+  Zone TestZone;
+  ArrayList<Node> TestZoneMembers;
   public static Random rand = new Random();
   /* ********************************************************************************************************* */
   public Display() {
@@ -40,9 +42,12 @@ public class Display {// 2d grid of nodes
         node.Yloc = this.YOrg + vcnt * NodeSpacing;
       }
     }
+    TestZoneMembers = new ArrayList<Node>();
+    CreateZone(TestZoneMembers);
     RandomChangeRate = 1.0;
     RandomizeAllConnections();
     RandomChangeRate = 0.125;
+    TriggerZoneBlast();
   }
   /* ********************************************************************************************************* */
   public void Connect2Nodes(Node node0, Node node1) {
@@ -104,6 +109,31 @@ public class Display {// 2d grid of nodes
     }
   }
   /* ********************************************************************************************************* */
+  public void CreateZone(ArrayList<Node> ZoneMembers) {
+    TestZone = new Zone();
+    ZoneMembers.clear();
+    int RegionWdt = 1;//this.GridWdt;// leftmost edge
+    int RegionHgt = this.GridHgt;
+    Zone ChildZone;
+    for (int vcnt = 0; vcnt < RegionHgt; vcnt++) {
+      for (int hcnt = 0; hcnt < RegionWdt; hcnt++) {
+        Node node = GetNodeFromXY(hcnt, vcnt);
+        ChildZone = TestZone.CloneMe();
+        node.ZoneVector.add(ChildZone);
+        ZoneMembers.add(node);
+      }
+    }
+  }
+  /* ********************************************************************************************************* */
+  public void TriggerZoneBlast() {
+    Node node;
+    int NumNodes = TestZoneMembers.size();
+    for (int cnt = 0; cnt < NumNodes; cnt++) {
+      node = TestZoneMembers.get(cnt);
+      node.LaunchMyOwnBlastPacket(TestZone);// must specify zone
+    }
+  }
+  /* ********************************************************************************************************* */
   public void CleanEverything() {// called once in a while
     for (int cnt = 0; cnt < this.Nodes.size(); cnt++) {
       Node node = this.Nodes.get(cnt);
@@ -147,7 +177,6 @@ public class Display {// 2d grid of nodes
   }
   /* ********************************************************************************************************* */
   Node TriggerBlastPacket(int MouseX, int MouseY) {
-    double dx, dy, dist, MinDist = Double.MAX_VALUE;
     Node closest = FindClosestNode(MouseX, MouseY);
     closest.LaunchMyOwnBlastPacket();
     return closest;
@@ -167,8 +196,16 @@ public class Display {// 2d grid of nodes
       nd.ProcessInPacketBuffer();
     }
   }
-  void Seek(int MouseX, int MouseY, Zone TargetNode) {
+  void Seek(int MouseX, int MouseY, Zone TargetZone) {
     Node seeker = FindClosestNode(MouseX, MouseY);
-    seeker.SendPacketTo(TargetNode);
+    seeker.SendPacketTo(TargetZone);
+  }
+  /* ********************************************************************************************************* */
+  @Override
+  public void DeleteMe() {
+    int NumNodes = Nodes.size();
+    for (int ncnt = 0; ncnt < NumNodes; ncnt++) {
+      Nodes.get(ncnt).DeleteMe();
+    }
   }
 }
