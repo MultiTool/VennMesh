@@ -28,17 +28,18 @@ public class Node implements IDeleteable {
   public Map<Node, NbrInfo> Neighbors;
   public Map<Zone, RouteEntry> Routing;
   public Zone MeZone;
-  public List<Zone> ZoneVector;// my address
+  private List<Zone> MyAddressVector;// my address
   public LinkedList<DataPacket> DataPacketInBuf, DataPacketOutBuf;
   //public LinkedList<Packet> PacketInBuf, PacketOutBuf;
   public LinkedList<BlastPacket> BlastPacketInBuf, BlastPacketOutBuf;
+  public Color MyColor;
   /* ********************************************************************************************************* */
   public Node() {
     Xloc = 0;
     Yloc = 0;
     this.MeZone = new Zone();
-    ZoneVector = new ArrayList<Zone>();// my address
-    ZoneVector.add(MeZone);// I am always a member of my own personal zone
+    MyAddressVector = new ArrayList<Zone>();// my address
+    MyAddressVector.add(MeZone);// I am always a member of my own personal zone
 
     Neighbors = new HashMap<Node, NbrInfo>();
     Routing = new HashMap<Zone, RouteEntry>();
@@ -54,6 +55,15 @@ public class Node implements IDeleteable {
     this.Earth = Earth0;
   }
   /* ********************************************************************************************************* */
+  public void JoinZone(Zone zoneid) {// join a zip code/zone/subnet
+    if (!MyAddressVector.contains(zoneid)) {
+      MyAddressVector.add(zoneid);
+      if (this.Routing.containsKey(zoneid)) {// I cannot have gradients to a zone I am part of
+        this.Routing.remove(zoneid);
+      }
+    }
+  }
+  /* ********************************************************************************************************* */
   public void ReceiveBlastPacketToBuffer(BlastPacket pkt) {// cache a packet for distance updates
     BlastPacketInBuf.add(pkt);
   }
@@ -63,20 +73,10 @@ public class Node implements IDeleteable {
   }
   /* ********************************************************************************************************* */
   public void LaunchMyOwnBlastPacket() {// emit my own packet to give everyone else my metrics
-    LaunchMyOwnBlastPacket(this.MeZone);
-    /*
-     BlastPacket pkt = new BlastPacket();
-     pkt.BirthTimeStamp = VennMesh.GetTimeStamp();
-     pkt.SerialNumber = this.MeZone.GetLatestSerialNumber();
-     pkt.OriginZone = this.MeZone;
-     pkt.Distance = 0;
-     pkt.FieldStrength = 1.0;// if we are initiating our own blast, field strength is 1. 
-     pkt.LatestSender = this;
-     BlastPacketOutBuf.add(pkt);
-     */
+    LaunchMyOwnBlastPacket(this.MeZone, 10000);
   }
   /* ********************************************************************************************************* */
-  public void LaunchMyOwnBlastPacket(Zone StartZone) {// emit my own packet to give everyone else the metrics of one of my address zones
+  public void LaunchMyOwnBlastPacket(Zone StartZone, int PacketLifeSpan) {// emit my own packet to give everyone else the metrics of one of my address zones
     BlastPacket pkt = new BlastPacket();
     pkt.BirthTimeStamp = VennMesh.GetTimeStamp();
     pkt.SerialNumber = StartZone.LatestSerialNumber;//.GetLatestSerialNumber();
@@ -84,6 +84,7 @@ public class Node implements IDeleteable {
     pkt.Distance = 0;
     pkt.FieldStrength = 1.0;// if we are initiating our own blast, field strength is 1. 
     pkt.LatestSender = this;
+    pkt.LifeSpan = PacketLifeSpan;
     BlastPacketOutBuf.add(pkt);
   }
   /* ********************************************************************************************************* */
@@ -95,7 +96,9 @@ public class Node implements IDeleteable {
       BlastPktNext = ProcessBlastPacket(bpkt);
       bpkt.DeleteMe();
       if (BlastPktNext != null) {
-        BlastPacketOutBuf.add(BlastPktNext);
+        if (BlastPktNext.LifeSpan > 0) {// snox, fiat lifespan is just for testing
+          BlastPacketOutBuf.add(BlastPktNext);
+        }
       }
     }
     while (!DataPacketInBuf.isEmpty()) {
@@ -106,33 +109,24 @@ public class Node implements IDeleteable {
         DataPacketOutBuf.add(DataPktNext);
       }
     }
-    /*
-     Packet TempPkt, pktnext = null;
-     while (!BlastPacketInBuf.isEmpty()) {
-     TempPkt = BlastPacketInBuf.removeFirst(); // if (TempPkt instanceof BlastPacket) { } ?
-     if (TempPkt.MyType == PacketTypeEnum.BlastPacket) {// more like C++
-     bpkt = (BlastPacket) TempPkt;
-     pktnext = ProcessBlastPacket(bpkt);
-     bpkt.DeleteMe();
-     if (pktnext != null) {
-     BlastPacketOutBuf.add(pktnext);
-     }
-     } else if (TempPkt.MyType == PacketTypeEnum.DataPacket) {
-     dpkt = (DataPacket) TempPkt;
-     pktnext = ProcessDataPacket(dpkt);
-     dpkt.DeleteMe();// ? 
-     if (pktnext != null) {
-     DataPacketOutBuf.add(pktnext);
-     }
-     }
-     }
-     */
-
   }
   /* ********************************************************************************************************* */
   private DataPacket ProcessDataPacket(DataPacket dpkt) {
     DataPacket retval = null;
-    if (this.Routing.containsKey(dpkt.Destination)) {
+    if (dpkt.UltimateDestination == this.MeZone) {
+      // data found me! stop doing everything and eat the data!
+      this.MyColor = new Color(0.0f, 1.0f, 0.0f);// bright green
+      return retval;
+    }
+    int FirstZoneDex = dpkt.ZoneDex;
+    while (!this.Routing.containsKey(dpkt.CurrentDestination)) {
+      dpkt.RotateTarget();// keep shifting packet targets until we find one that we know about
+      if (dpkt.ZoneDex == FirstZoneDex) {
+        break;// snox, not thought out
+      }
+    }
+    //if (dpkt.ZoneDex != FirstZoneDex) {
+    if (this.Routing.containsKey(dpkt.CurrentDestination)) {
       retval = dpkt.CloneMe();
     }
     return retval;
@@ -143,8 +137,8 @@ public class Node implements IDeleteable {
     DataPacket pkt;// go through all waiting outpackets, and send each to appropriate neighbor.
     while (!DataPacketOutBuf.isEmpty()) {
       pkt = DataPacketOutBuf.removeFirst();
-      if (this.Routing.containsKey(pkt.Destination)) {
-        MyKnowledgeOfDestination = this.Routing.get(pkt.Destination);
+      if (this.Routing.containsKey(pkt.CurrentDestination)) {
+        MyKnowledgeOfDestination = this.Routing.get(pkt.CurrentDestination);
         NbrInfo ToNbr = MyKnowledgeOfDestination.ClosestNbr;
         ToNbr.ReceiveDataPacketToBuffer(pkt);
       }
@@ -165,7 +159,7 @@ public class Node implements IDeleteable {
     //pkt.LatestSender = this;//?
     NbrInfo FromNbr = this.Neighbors.get(nbr);// nbr is the neighbor who handed me this packet
 
-    if (this.ZoneVector.contains(pkt.OriginZone)) {
+    if (this.MyAddressVector.contains(pkt.OriginZone)) {
       /*
        first, if I am a member of the same zone that launched this packet, disregard it. no gradients of a zone inside that zone.
        what happens if a node disobeys this?
@@ -339,7 +333,7 @@ public class Node implements IDeleteable {
      Map<Node, NbrInfo> Neighbors;
      Map<Zone, RouteEntry> Routing;
      Zone MeZone;
-     List<Zone> ZoneVector;// my address
+     List<Zone> MyAddressVector;// my address
      LinkedList<DataPacket> DataPacketInBuf, DataPacketOutBuf;
      LinkedList<BlastPacket> BlastPacketInBuf, BlastPacketOutBuf;
      */
@@ -353,21 +347,22 @@ public class Node implements IDeleteable {
     }
   }
   /* ********************************************************************************************************* */
-  void SendPacketTo(Zone TargetZone) {
-    DataPacket dp = new DataPacket();
-    dp.Destination = TargetZone;
-    this.DataPacketOutBuf.add(dp);
+  void SendPacketToZone(Zone TargetZone) {
+    DataPacket dpkt = new DataPacket();
+    {// hack. long run targetzone will be targetnode, and node will give an address vector of zones to the data packet
+      ArrayList<Zone> zvector = new ArrayList<Zone>();
+      zvector.add(TargetZone);
+      dpkt.AssignDestinationVector(zvector);
+      dpkt.UltimateDestination = TargetZone;// this is wrong. ultimate dest can only be a single node, not a zone
+    }
+    this.DataPacketOutBuf.add(dpkt);
   }
   /* ********************************************************************************************************* */
-  public void ReceiveRealPacket(Node nbr, BlastPacket pkt) {// for routing and passing on real communication packets
-    BlastPacket PktNext = null;
-    RouteEntry entry = null;
-    NbrInfo NextHop = null;
-    entry = this.Routing.get(pkt.OriginZone);
-    NextHop = entry.ClosestNbr;
-    PktNext = pkt.CloneMe();
-    PktNext.Distance += NextHop.Distance;// snox packet receiver should probably inc distance on receipt. then actual measured time might be used.
-    // next clone the packet, increment its distance by entry.ClosestNbr.Distance, and forward it to the NextHop nbr
+  void SendPacketToNode(Node TargetNode) {
+    DataPacket dpkt = new DataPacket();
+    dpkt.AssignDestinationVector(TargetNode.MyAddressVector);
+    dpkt.UltimateDestination = TargetNode.MeZone;// this is wrong. ultimate dest can only be a single node, not a zone
+    this.DataPacketOutBuf.add(dpkt);
   }
   /* ********************************************************************************************************* */
   public void CalcFieldFocus(RouteEntry EndPoint) {// Determine how much the gradient from a zone should fall off as it passes through me.
@@ -429,7 +424,7 @@ public class Node implements IDeleteable {
       }
       //System.out.println("" + fstrength + ";");
       //Color MyColor = Color.getHSBColor(fstrength, fstrength, fstrength);
-      Color MyColor = new Color(fstrength, fstrength, fstrength);
+      MyColor = new Color(fstrength, fstrength, fstrength);
       if (fstrength > 1.0 / 4.0) {
         MyColor = new Color(fstrength, 0.0f, 0.0f);
       } else if (fstrength > 1.0 / 16.0) {
@@ -593,27 +588,49 @@ public class Node implements IDeleteable {
   }
   /* ********************************************************************************************************* */
   public static class DataPacket extends Packet {// this is a blast packet
-    public Zone Destination;
+    public Zone CurrentDestination;
+    public Zone UltimateDestination;// is this necessary?
+    public List<Zone> DestAddressVector;// Destination address
+    public int ZoneDex;
     public DataPacket() {//super();
       MyType = PacketTypeEnum.DataPacket;
+      ZoneDex = 0;
+      DestAddressVector = new ArrayList<Zone>();
+    }
+    public void AssignDestinationVector(List<Zone> AddressVector) {
+      Zone zoneid;
+      int AddrLen = AddressVector.size();
+      for (int cnt = 0; cnt < AddrLen; cnt++) {
+        zoneid = AddressVector.get(cnt).CloneMe();
+        DestAddressVector.add(zoneid);
+      }
+      CurrentDestination = DestAddressVector.get(ZoneDex);
+    }
+    public void RotateTarget() {
+      ZoneDex++;
+      if (ZoneDex >= DestAddressVector.size()) {
+        ZoneDex = 0;
+      }
+      CurrentDestination = DestAddressVector.get(ZoneDex);
     }
     @Override
     public DataPacket CloneMe() {
       DataPacket child = new DataPacket();
       child.CopyVals(this);
-      child.Destination = this.Destination;
+      child.CurrentDestination = this.CurrentDestination;
       return child;
     }
     @Override
     public void DeleteMe() {
       super.DeleteMe();
-      Destination = null;
+      CurrentDestination = null;
     }
   }
   /* ********************************************************************************************************* */
   public static class BlastPacket extends Packet {// this is a blast packet
     public double Distance;
     public double FieldStrength;
+    public int LifeSpan;
     public BlastPacket() {
       //super();
       MyType = PacketTypeEnum.BlastPacket;
@@ -624,6 +641,7 @@ public class Node implements IDeleteable {
       child.CopyVals(this);
       child.Distance = this.Distance;
       child.FieldStrength = this.FieldStrength;
+      child.LifeSpan = this.LifeSpan;
       return child;
     }
     public void UpdateForResend(Node Sender, double NextDist, double FieldFocus) {
@@ -631,6 +649,7 @@ public class Node implements IDeleteable {
       this.Distance += NextDist;// now packet's distance will be my distance from endpoint
       //this.FieldStrength *= FieldFocus;// now child's field strength will be the strength of field at me
       this.FieldStrength = FieldFocus;
+      this.LifeSpan--;// just for experimenting, forced expiration of packet
     }
     @Override
     public void DeleteMe() {

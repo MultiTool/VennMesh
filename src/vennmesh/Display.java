@@ -43,11 +43,11 @@ public class Display implements IDeleteable {// 2d grid of nodes
       }
     }
     TestZoneMembers = new ArrayList<Node>();
-    CreateZone(TestZoneMembers);
+    CreateTestZone(TestZoneMembers);
     RandomChangeRate = 1.0;
     RandomizeAllConnections();
     RandomChangeRate = 0.125;
-    TriggerZoneBlast();
+    TriggerTestZoneBlast();
   }
   /* ********************************************************************************************************* */
   public void Connect2Nodes(Node node0, Node node1) {
@@ -109,9 +109,9 @@ public class Display implements IDeleteable {// 2d grid of nodes
     }
   }
   /* ********************************************************************************************************* */
-  public void CreateZone(ArrayList<Node> ZoneMembers) {
+  public void CreateTestZone(ArrayList<Node> TestZoneMembers) {
     TestZone = new Zone();
-    ZoneMembers.clear();
+    TestZoneMembers.clear();
     int RegionWdt = 1;//this.GridWdt;// leftmost edge
     int RegionHgt = this.GridHgt;
     Zone ChildZone;
@@ -119,18 +119,18 @@ public class Display implements IDeleteable {// 2d grid of nodes
       for (int hcnt = 0; hcnt < RegionWdt; hcnt++) {
         Node node = GetNodeFromXY(hcnt, vcnt);
         ChildZone = TestZone.CloneMe();
-        node.ZoneVector.add(ChildZone);
-        ZoneMembers.add(node);
+        node.JoinZone(ChildZone);
+        TestZoneMembers.add(node);
       }
     }
   }
   /* ********************************************************************************************************* */
-  public void TriggerZoneBlast() {
+  public void TriggerTestZoneBlast() {
     Node node;
     int NumNodes = TestZoneMembers.size();
     for (int cnt = 0; cnt < NumNodes; cnt++) {
       node = TestZoneMembers.get(cnt);
-      node.LaunchMyOwnBlastPacket(TestZone);// must specify zone
+      node.LaunchMyOwnBlastPacket(TestZone, 8);// must specify zone 10000
     }
   }
   /* ********************************************************************************************************* */
@@ -198,7 +198,7 @@ public class Display implements IDeleteable {// 2d grid of nodes
   }
   void Seek(int MouseX, int MouseY, Zone TargetZone) {
     Node seeker = FindClosestNode(MouseX, MouseY);
-    seeker.SendPacketTo(TargetZone);
+    seeker.SendPacketToZone(TargetZone);
   }
   /* ********************************************************************************************************* */
   @Override
