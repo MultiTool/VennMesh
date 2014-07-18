@@ -362,7 +362,8 @@ public class Node implements IDeleteable {
     DataPacket dpkt = new DataPacket();
     dpkt.AssignDestinationVector(TargetNode.MyAddressVector);
     dpkt.UltimateDestination = TargetNode.MeZone;// this is wrong. ultimate dest can only be a single node, not a zone
-    this.DataPacketOutBuf.add(dpkt);
+    //this.DataPacketOutBuf.add(dpkt);
+    this.DataPacketInBuf.add(dpkt);
   }
   /* ********************************************************************************************************* */
   public void CalcFieldFocus(RouteEntry EndPoint) {// Determine how much the gradient from a zone should fall off as it passes through me.
@@ -613,11 +614,21 @@ public class Node implements IDeleteable {
       }
       CurrentDestination = DestAddressVector.get(ZoneDex);
     }
+    public void CopyValsData(DataPacket donor) {
+      this.CopyVals(donor);
+      Zone parentzone, childzone;
+      int NumZones = donor.DestAddressVector.size();
+      for (int cnt = 0; cnt < NumZones; cnt++) {
+        parentzone = donor.DestAddressVector.get(cnt);
+        childzone = parentzone.CloneMe();
+        this.DestAddressVector.add(childzone);
+      }
+      this.CurrentDestination = donor.CurrentDestination;
+    }
     @Override
     public DataPacket CloneMe() {
       DataPacket child = new DataPacket();
-      child.CopyVals(this);
-      child.CurrentDestination = this.CurrentDestination;
+      child.CopyValsData(this);
       return child;
     }
     @Override

@@ -23,8 +23,10 @@ public class Display implements IDeleteable {// 2d grid of nodes
   int MaxConnectionRadius = 1;
   int XOrg, YOrg;
   List<Node> Nodes;
-  Zone TestZone;
+  public Node TargetNode;
+  Zone TestZone, BoxZone;
   ArrayList<Node> TestZoneMembers;
+  ArrayList<Node> BoxZoneMembers;
   public static Random rand = new Random();
   /* ********************************************************************************************************* */
   public Display() {
@@ -43,11 +45,18 @@ public class Display implements IDeleteable {// 2d grid of nodes
       }
     }
     TestZoneMembers = new ArrayList<Node>();
-    CreateTestZone(TestZoneMembers);
+    TestZone = CreateBoxZone(0, 0, 1, this.GridHgt, TestZoneMembers);
+
+    BoxZoneMembers = new ArrayList<Node>();
+    BoxZone = CreateBoxZone(0, 0, 1, 1, BoxZoneMembers);
+    TargetNode = BoxZoneMembers.get(0);
+
     RandomChangeRate = 1.0;
     RandomizeAllConnections();
     RandomChangeRate = 0.125;
-    TriggerTestZoneBlast();
+
+    TriggerTestZoneBlast(TestZone, 8, TestZoneMembers);
+    TriggerTestZoneBlast(BoxZone, 8, BoxZoneMembers);
   }
   /* ********************************************************************************************************* */
   public void Connect2Nodes(Node node0, Node node1) {
@@ -109,8 +118,8 @@ public class Display implements IDeleteable {// 2d grid of nodes
     }
   }
   /* ********************************************************************************************************* */
-  public void CreateTestZone(ArrayList<Node> TestZoneMembers) {
-    TestZone = new Zone();
+  public Zone CreateTestZone(ArrayList<Node> TestZoneMembers) {
+    Zone XZone = new Zone();
     TestZoneMembers.clear();
     int RegionWdt = 1;//this.GridWdt;// leftmost edge
     int RegionHgt = this.GridHgt;
@@ -118,19 +127,36 @@ public class Display implements IDeleteable {// 2d grid of nodes
     for (int vcnt = 0; vcnt < RegionHgt; vcnt++) {
       for (int hcnt = 0; hcnt < RegionWdt; hcnt++) {
         Node node = GetNodeFromXY(hcnt, vcnt);
-        ChildZone = TestZone.CloneMe();
+        ChildZone = XZone.CloneMe();
         node.JoinZone(ChildZone);
         TestZoneMembers.add(node);
       }
     }
+    return XZone;
   }
   /* ********************************************************************************************************* */
-  public void TriggerTestZoneBlast() {
+  public Zone CreateBoxZone(int XMin, int YMin, int XMax, int YMax, ArrayList<Node> ZoneMembers) {
+    Zone XZone = new Zone();
+    ZoneMembers.clear();
+    Zone ChildZone;
+    for (int vcnt = YMin; vcnt < YMax; vcnt++) {
+      for (int hcnt = XMin; hcnt < XMax; hcnt++) {
+        Node node = GetNodeFromXY(hcnt, vcnt);
+        ChildZone = XZone.CloneMe();
+        node.JoinZone(ChildZone);
+        ZoneMembers.add(node);
+      }
+    }
+    return XZone;
+  }
+  /* ********************************************************************************************************* */
+  public void TriggerTestZoneBlast(Zone SourceZone, int Distance, ArrayList<Node> ZoneMembers) {
     Node node;
-    int NumNodes = TestZoneMembers.size();
+    int NumNodes = ZoneMembers.size();
     for (int cnt = 0; cnt < NumNodes; cnt++) {
-      node = TestZoneMembers.get(cnt);
-      node.LaunchMyOwnBlastPacket(TestZone, 8);// must specify zone 10000
+      node = ZoneMembers.get(cnt);
+      node.LaunchMyOwnBlastPacket(SourceZone, Distance);// must specify zone 10000
+      //node.LaunchMyOwnBlastPacket(SourceZone, 8);// must specify zone 10000
     }
   }
   /* ********************************************************************************************************* */
@@ -196,9 +222,14 @@ public class Display implements IDeleteable {// 2d grid of nodes
       nd.ProcessInPacketBuffer();
     }
   }
+  /* ********************************************************************************************************* */
   void Seek(int MouseX, int MouseY, Zone TargetZone) {
     Node seeker = FindClosestNode(MouseX, MouseY);
     seeker.SendPacketToZone(TargetZone);
+  }
+  void Seek(int MouseX, int MouseY, Node TargetNode) {
+    Node seeker = FindClosestNode(MouseX, MouseY);
+    seeker.SendPacketToNode(TargetNode);
   }
   /* ********************************************************************************************************* */
   @Override
